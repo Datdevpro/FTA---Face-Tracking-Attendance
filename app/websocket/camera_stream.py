@@ -22,6 +22,7 @@ from app.config import settings
 from app.core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
+_employee_name_cache = {}
 
 # Processing frame rate for recognition (lower = less CPU)
 PROCESS_FPS = 5
@@ -50,6 +51,9 @@ async def camera_stream_handler(
     await websocket.accept()
     logger.info("WebSocket client connected for camera stream")
 
+    if not camera_service.is_running:
+        camera_service.start()
+
     try:
         while True:
             start_time = time.time()
@@ -57,11 +61,14 @@ async def camera_stream_handler(
             # Get frame from camera
             frame = camera_service.get_frame()
             if frame is None:
+                status = camera_service.get_status()
+                message = "Camera is starting" if status.get("starting") else "Camera not available"
                 await websocket.send_json({
-                    "type": "error",
-                    "message": "Camera not available",
+                    "type": "status",
+                    "message": message,
+                    "status": status,
                 })
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.2)
                 continue
 
             # Run face detection and recognition in thread pool
@@ -111,6 +118,8 @@ async def camera_stream_handler(
             await websocket.close()
         except Exception:
             pass
+    finally:
+        camera_service.stop()
 
 
 def _process_frame(
@@ -185,28 +194,17 @@ def _process_frame(
             if matches:
                 employee_id, similarity = matches[0]
                 color = (0, 255, 0)  # Green for recognized
+                name = _get_employee_name(employee_id)
 
-                # Get employee name from DB
                 db: Session = SessionLocal()
                 try:
-                    from app.models.employee import Employee
-
-                    employee = (
-                        db.query(Employee)
-                        .filter(Employee.id == employee_id)
-                        .first()
+                    event = attendance_service.process_recognition(
+                        db=db,
+                        employee_id=employee_id,
+                        confidence=similarity,
                     )
-                    if employee:
-                        name = employee.full_name
-
-                        # Process attendance
-                        event = attendance_service.process_recognition(
-                            db=db,
-                            employee_id=employee_id,
-                            confidence=similarity,
-                        )
-                        if event:
-                            attendance_events.append(event)
+                    if event:
+                        attendance_events.append(event)
                 finally:
                     db.close()
 
@@ -254,3 +252,22 @@ def _process_frame(
         "faces": faces_data,
         "attendance_events": attendance_events,
     }
+
+
+def _get_employee_name(employee_id: int) -> str:
+    cached_name = _employee_name_cache.get(employee_id)
+    if cached_name:
+        return cached_name
+
+    db: Session = SessionLocal()
+    try:
+        from app.models.employee import Employee
+
+        employee = db.query(Employee).filter(Employee.id == employee_id).first()
+        if employee:
+            _employee_name_cache[employee_id] = employee.full_name
+            return employee.full_name
+    finally:
+        db.close()
+
+    return "Unknown"

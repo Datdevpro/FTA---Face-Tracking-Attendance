@@ -141,6 +141,9 @@
             try {
                 const health = await api.getHealth();
                 const statusEl = document.getElementById('systemStatus');
+                const activeProvider = health.face_provider_active || 'Not initialized';
+                const inferenceBadgeClass = health.face_using_gpu ? 'badge-success' : 'badge-warning';
+                const inferenceLabel = health.face_using_gpu ? 'GPU CUDA' : 'CPU';
                 statusEl.innerHTML = `
                     <div style="display: flex; flex-direction: column; gap: var(--space-4);">
                         <div class="flex items-center justify-between">
@@ -148,6 +151,14 @@
                             <span class="badge ${health.face_model_loaded ? 'badge-success' : 'badge-danger'}">
                                 ${health.face_model_loaded ? '🟢 Loaded' : '🔴 Not loaded'}
                             </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm">Inference</span>
+                            <span class="badge ${inferenceBadgeClass}">${inferenceLabel}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm">Provider</span>
+                            <span class="text-xs text-muted">${activeProvider}</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-sm">FAISS Index</span>

@@ -91,10 +91,14 @@
     <script>
         let ws = null;
         let isStreaming = false;
+        let streamToken = 0;
+        const cameraPlaceholder =
+            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23111827'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%2364748b' font-size='16' font-family='Inter'%3ECamera ch%C6%B0a k%E1%BA%BFt n%E1%BB%91i%3C/text%3E%3C/svg%3E";
         const attendanceEvents = [];
 
         function startStream() {
             if (isStreaming) return;
+            const currentToken = ++streamToken;
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/camera-stream`;
@@ -105,15 +109,19 @@
                 isStreaming = true;
                 document.getElementById('btnStartCamera').style.display = 'none';
                 document.getElementById('btnStopCamera').style.display = '';
-                document.getElementById('cameraStatusDot').className = 'status-dot online';
-                document.getElementById('cameraStatusText').textContent = 'Live';
-                toast.success('Camera', 'Đã kết nối camera thành công');
+                document.getElementById('cameraStatusDot').className = 'status-dot starting';
+                document.getElementById('cameraStatusText').textContent = 'Starting...';
+                toast.success('Camera', 'Đang bật camera');
             };
 
             ws.onmessage = (event) => {
+                if (currentToken !== streamToken || !isStreaming) return;
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'frame') {
+                    document.getElementById('cameraStatusDot').className = 'status-dot online';
+                    document.getElementById('cameraStatusText').textContent = 'Live';
+
                     // Update camera feed
                     const feed = document.getElementById('cameraFeed');
                     feed.src = `data:image/jpeg;base64,${data.frame}`;
@@ -140,17 +148,20 @@
                         });
                         updateAttendanceLog();
                     }
+                } else if (data.type === 'status') {
+                    document.getElementById('cameraStatusDot').className =
+                        data.status && data.status.starting ? 'status-dot starting' : 'status-dot offline';
+                    document.getElementById('cameraStatusText').textContent =
+                        data.status && data.status.starting ? 'Starting...' : data.message;
                 } else if (data.type === 'error') {
                     toast.error('Camera Error', data.message);
                 }
             };
 
             ws.onclose = () => {
-                isStreaming = false;
-                document.getElementById('btnStartCamera').style.display = '';
-                document.getElementById('btnStopCamera').style.display = 'none';
-                document.getElementById('cameraStatusDot').className = 'status-dot offline';
-                document.getElementById('cameraStatusText').textContent = 'Offline';
+                if (currentToken === streamToken) {
+                    resetCameraView();
+                }
             };
 
             ws.onerror = (error) => {
@@ -159,12 +170,36 @@
             };
         }
 
-        function stopStream() {
+        async function stopStream() {
+            streamToken++;
             if (ws) {
                 ws.close();
                 ws = null;
             }
             isStreaming = false;
+            resetCameraView();
+            try {
+                await api.stopCamera();
+            } catch (e) {
+                console.error('Stop camera error:', e);
+            }
+        }
+
+        function resetCameraView() {
+            isStreaming = false;
+            document.getElementById('btnStartCamera').style.display = '';
+            document.getElementById('btnStopCamera').style.display = 'none';
+            document.getElementById('cameraStatusDot').className = 'status-dot offline';
+            document.getElementById('cameraStatusText').textContent = 'Offline';
+            document.getElementById('cameraFeed').src = cameraPlaceholder;
+            document.getElementById('cameraFps').textContent = '';
+            document.getElementById('faceCount').textContent = '0 faces';
+            document.getElementById('detectedFaces').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <div class="empty-state-desc">Bắt đầu camera để nhận diện</div>
+                </div>
+            `;
         }
 
         function updateDetectedFaces(faces) {
@@ -253,6 +288,7 @@
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
+            navigator.sendBeacon('/api/camera/stop');
             if (ws) ws.close();
         });
     </script>

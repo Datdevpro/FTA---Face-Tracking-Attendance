@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # --- Database ---
     DATABASE_URL: str = "sqlite:///./data/fta.db"
+    DB_ECHO: bool = False
 
     # --- JWT Authentication ---
     JWT_SECRET_KEY: str = "fta-dev-secret-key-change-in-production"
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
 
     # --- Face Recognition ---
     FACE_MODEL_NAME: str = "buffalo_l"
+    FACE_ONNX_PROVIDER: str = "cuda"
     FACE_DETECTION_THRESHOLD: float = 0.5
     FACE_RECOGNITION_THRESHOLD: float = 0.4
     FACE_MIN_QUALITY: float = 0.3

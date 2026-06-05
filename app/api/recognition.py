@@ -307,6 +307,10 @@ def recognition_status(current_user=Depends(get_current_user)):
     return {
         "model_loaded": face_service.is_initialized,
         "model_name": face_service.model_name,
+        "provider_configured": settings.FACE_ONNX_PROVIDER,
+        "provider_active": face_service.active_provider,
+        "providers_active": face_service.active_providers,
+        "using_gpu": face_service.is_using_gpu,
         "index_initialized": face_index_mgr.is_initialized,
         "total_faces_indexed": face_index_mgr.total_faces,
         "total_employees_indexed": face_index_mgr.total_employees,

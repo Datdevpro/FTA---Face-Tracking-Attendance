@@ -3,6 +3,7 @@ Camera Service for managing video capture from USB or IP cameras.
 """
 
 import logging
+import sys
 import threading
 import time
 from typing import Optional
@@ -41,30 +42,31 @@ class CameraService:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._connected = False
+        self._starting = False
         self._last_frame_time = 0.0
         self._frame_count = 0
 
     def start(self):
-        """Start the camera capture thread."""
+        """Start the camera capture thread without blocking on device connection."""
         if self._running:
             return
 
-        self._connect()
-        if not self._connected:
-            logger.error(f"Failed to connect to camera: {self.source}")
-            return
-
         self._running = True
+        self._starting = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
-        logger.info(f"Camera started: source={self.source}")
+        logger.info(f"Camera starting: source={self.source}")
 
     def stop(self):
         """Stop the camera capture thread."""
         self._running = False
         if self._thread:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=1)
+            self._thread = None
         self._disconnect()
+        self._starting = False
+        self._frame_count = 0
+        self._last_frame_time = 0.0
         logger.info("Camera stopped")
 
     def get_frame(self) -> Optional[np.ndarray]:
@@ -96,7 +98,10 @@ class CameraService:
     def _connect(self):
         """Connect to the camera."""
         try:
-            self._cap = cv2.VideoCapture(self.source)
+            if isinstance(self.source, int) and sys.platform.startswith("win"):
+                self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
+            else:
+                self._cap = cv2.VideoCapture(self.source)
             if isinstance(self.source, int):
                 # USB camera settings
                 self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
@@ -107,12 +112,15 @@ class CameraService:
 
             self._connected = self._cap.isOpened()
             if self._connected:
+                self._starting = False
                 logger.info(f"Camera connected: {self.source}")
             else:
+                self._starting = False
                 logger.warning(f"Camera not available: {self.source}")
         except Exception as e:
             logger.error(f"Camera connection error: {e}")
             self._connected = False
+            self._starting = False
 
     def _disconnect(self):
         """Release camera resources."""
@@ -120,6 +128,8 @@ class CameraService:
             self._cap.release()
             self._cap = None
         self._connected = False
+        with self._lock:
+            self._frame = None
 
     def _capture_loop(self):
         """Background thread that continuously captures frames."""
@@ -129,8 +139,10 @@ class CameraService:
         while self._running:
             if not self._connected or not self._cap or not self._cap.isOpened():
                 logger.warning("Camera disconnected. Reconnecting...")
-                time.sleep(reconnect_delay)
+                self._starting = True
                 self._connect()
+                if not self._connected:
+                    time.sleep(reconnect_delay)
                 continue
 
             try:
@@ -159,6 +171,10 @@ class CameraService:
         return self._running
 
     @property
+    def is_starting(self) -> bool:
+        return self._starting and not self._connected
+
+    @property
     def frame_count(self) -> int:
         return self._frame_count
 
@@ -168,6 +184,7 @@ class CameraService:
             "source": str(self.source),
             "connected": self._connected,
             "running": self._running,
+            "starting": self.is_starting,
             "resolution": f"{self.width}x{self.height}",
             "fps": self.fps,
             "frame_count": self._frame_count,

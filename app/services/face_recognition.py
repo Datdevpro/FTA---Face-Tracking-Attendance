@@ -8,7 +8,10 @@ This is the core AI engine that handles:
 """
 
 import logging
+import os
+import site
 import time
+import ctypes
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -20,6 +23,8 @@ logger = logging.getLogger(__name__)
 # InsightFace is imported lazily to avoid import errors during testing
 _insightface = None
 _app = None
+_dll_directory_handles = []
+_preloaded_cuda_dlls = []
 
 
 def _get_insightface():
@@ -30,6 +35,49 @@ def _get_insightface():
 
         _insightface = insightface
     return _insightface
+
+
+def _prepare_cuda_dll_search_path(ort):
+    """Make CUDA/cuDNN DLLs discoverable for ONNX Runtime on Windows."""
+    if not hasattr(os, "add_dll_directory"):
+        if hasattr(ort, "preload_dlls"):
+            ort.preload_dlls()
+        return
+
+    candidate_dirs = []
+
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        candidate_dirs.append(Path(cuda_path) / "bin")
+
+    for site_path in site.getsitepackages():
+        nvidia_path = Path(site_path) / "nvidia"
+        if not nvidia_path.exists():
+            continue
+        candidate_dirs.extend(path for path in nvidia_path.glob("*\\bin") if path.is_dir())
+
+    seen = set()
+    for path in candidate_dirs:
+        resolved = str(path.resolve())
+        if resolved in seen or not path.exists():
+            continue
+        seen.add(resolved)
+        _dll_directory_handles.append(os.add_dll_directory(resolved))
+
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    new_path_entries = [path for path in seen if path not in path_entries]
+    if new_path_entries:
+        os.environ["PATH"] = os.pathsep.join([*new_path_entries, *path_entries])
+
+    if hasattr(ort, "preload_dlls"):
+        ort.preload_dlls()
+
+    for directory in seen:
+        for dll_path in sorted(Path(directory).glob("cudnn*.dll")):
+            try:
+                _preloaded_cuda_dlls.append(ctypes.WinDLL(str(dll_path)))
+            except OSError as exc:
+                logger.warning(f"Could not preload CUDA DLL {dll_path}: {exc}")
 
 
 class FaceInfo:
@@ -58,10 +106,19 @@ class FaceRecognitionService:
     The model is loaded once at startup and reused for all requests.
     """
 
-    def __init__(self, model_name: str = "buffalo_l", models_dir: str = "./data/models", det_size: int = 320):
+    def __init__(
+        self,
+        model_name: str = "buffalo_l",
+        models_dir: str = "./data/models",
+        det_size: int = 320,
+        onnx_provider: str = "cpu",
+    ):
         self.model_name = model_name
         self.models_dir = models_dir
         self.det_size = det_size
+        self.onnx_provider = onnx_provider
+        self.active_provider = None
+        self.active_providers = []
         self._app = None
         self._initialized = False
 
@@ -85,15 +142,36 @@ class FaceRecognitionService:
         available_providers = ort.get_available_providers()
         logger.info(f"Available ONNX Runtime providers: {available_providers}")
 
-        if "CUDAExecutionProvider" in available_providers:
+        requested_provider = (self.onnx_provider or "cpu").strip().lower()
+        if requested_provider in {"cuda", "gpu", "auto"} and "CUDAExecutionProvider" in available_providers:
+            _prepare_cuda_dll_search_path(ort)
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             ctx_id = 0
             logger.info("Using GPU for face recognition inference (CUDAExecutionProvider).")
         else:
             providers = ["CPUExecutionProvider"]
             ctx_id = -1
+            if requested_provider in {"cuda", "gpu"}:
+                logger.warning("CUDAExecutionProvider is not available; using CPUExecutionProvider instead.")
             logger.info("Using CPU for face recognition inference (CPUExecutionProvider).")
 
+        try:
+            self._prepare_app(insightface, models_path, providers, ctx_id)
+        except Exception:
+            if providers[0] != "CUDAExecutionProvider":
+                raise
+            logger.exception("CUDA model initialization failed; retrying with CPUExecutionProvider.")
+            providers = ["CPUExecutionProvider"]
+            ctx_id = -1
+            self._prepare_app(insightface, models_path, providers, ctx_id)
+
+        self.active_providers = providers
+        self.active_provider = providers[0]
+        elapsed = time.time() - start
+        logger.info(f"InsightFace model loaded in {elapsed:.2f}s (det_size={self.det_size}, ctx_id={ctx_id})")
+        self._initialized = True
+
+    def _prepare_app(self, insightface, models_path: Path, providers: List[str], ctx_id: int):
         self._app = insightface.app.FaceAnalysis(
             name=self.model_name,
             root=str(models_path),
@@ -102,10 +180,6 @@ class FaceRecognitionService:
         # det_size=(320,320) is much faster than (640,640) on CPU
         # with minimal accuracy loss for close-range face detection
         self._app.prepare(ctx_id=ctx_id, det_size=(self.det_size, self.det_size))
-
-        elapsed = time.time() - start
-        logger.info(f"InsightFace model loaded in {elapsed:.2f}s (det_size={self.det_size}, ctx_id={ctx_id})")
-        self._initialized = True
 
     def detect_faces(
         self,
@@ -257,3 +331,7 @@ class FaceRecognitionService:
     @property
     def is_initialized(self) -> bool:
         return self._initialized
+
+    @property
+    def is_using_gpu(self) -> bool:
+        return self.active_provider == "CUDAExecutionProvider"

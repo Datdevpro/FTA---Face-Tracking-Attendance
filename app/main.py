@@ -6,7 +6,6 @@ This module initializes all services, registers routes,
 and configures the application lifecycle.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -44,6 +43,7 @@ logger = logging.getLogger(__name__)
 face_service = FaceRecognitionService(
     model_name=settings.FACE_MODEL_NAME,
     models_dir=settings.MODELS_DIR,
+    onnx_provider=settings.FACE_ONNX_PROVIDER,
 )
 face_index = FaceIndexManager(index_dir=settings.FAISS_INDEX_DIR)
 anti_spoofing = AntiSpoofingService(threshold=settings.ANTI_SPOOFING_THRESHOLD)
@@ -213,10 +213,6 @@ async def websocket_camera_stream(websocket: WebSocket):
     """WebSocket endpoint for live camera recognition stream."""
     from app.websocket.camera_stream import camera_stream_handler
 
-    # Start camera if not running
-    if not camera_service.is_running:
-        camera_service.start()
-
     await camera_stream_handler(
         websocket=websocket,
         face_service=face_service,
@@ -245,6 +241,11 @@ def health_check():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "face_model_loaded": face_service.is_initialized,
+        "face_model_name": face_service.model_name,
+        "face_provider_configured": settings.FACE_ONNX_PROVIDER,
+        "face_provider_active": face_service.active_provider,
+        "face_providers_active": face_service.active_providers,
+        "face_using_gpu": face_service.is_using_gpu,
         "faiss_index_faces": face_index.total_faces,
         "camera_connected": camera_service.is_connected,
     }
@@ -260,9 +261,8 @@ def camera_status():
 async def start_camera():
     """Start the camera capture (non-blocking)."""
     if camera_service.is_running:
-        return {"message": "Camera already running"}
-    # Run camera connection in background thread so it doesn't block the event loop
-    await asyncio.get_event_loop().run_in_executor(None, camera_service.start)
+        return {"message": "Camera already running", "status": camera_service.get_status()}
+    camera_service.start()
     return {"message": "Camera started", "status": camera_service.get_status()}
 
 
