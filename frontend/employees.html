@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FTA - Quản lý nhân viên">
+    <title>Nhân viên | FTA</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <h1 class="page-title">👥 Quản lý nhân viên</h1>
+                </div>
+                <div class="top-bar-right">
+                    <span class="top-bar-time" id="clock"></span>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <!-- Toolbar -->
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex gap-4">
+                        <div class="search-bar">
+                            <span class="search-bar-icon">🔍</span>
+                            <input type="text" class="form-input" id="searchInput"
+                                   placeholder="Tìm kiếm nhân viên..." style="padding-left: 36px; width: 300px;">
+                        </div>
+                        <select class="form-select" id="deptFilter" style="width: 200px;">
+                            <option value="">Tất cả phòng ban</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="openModal('employeeModal')">
+                        ➕ Thêm nhân viên
+                    </button>
+                </div>
+
+                <!-- Employee Table -->
+                <div class="card">
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-container" id="employeeTable">
+                            <div class="loading-overlay">
+                                <div class="spinner"></div>
+                                <div class="loading-text">Đang tải...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer" id="paginationContainer"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Employee Modal -->
+    <div class="modal-overlay" id="employeeModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Thêm nhân viên</h3>
+                <button class="modal-close" onclick="closeModal('employeeModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="employeeForm">
+                    <input type="hidden" id="empId">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Mã nhân viên *</label>
+                            <input type="text" class="form-input" id="empCode" required placeholder="VD: NV001">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Họ và tên *</label>
+                            <input type="text" class="form-input" id="empName" required placeholder="Nguyễn Văn A">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="empEmail" placeholder="email@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Số điện thoại</label>
+                            <input type="text" class="form-input" id="empPhone" placeholder="0912345678">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Phòng ban</label>
+                            <select class="form-select" id="empDept">
+                                <option value="">Chọn phòng ban</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Chức vụ</label>
+                            <input type="text" class="form-input" id="empPosition" placeholder="Nhân viên">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Ngày sinh</label>
+                            <input type="date" class="form-input" id="empDob">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Giới tính</label>
+                            <select class="form-select" id="empGender">
+                                <option value="">Chọn</option>
+                                <option value="MALE">Nam</option>
+                                <option value="FEMALE">Nữ</option>
+                                <option value="OTHER">Khác</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ngày vào làm</label>
+                        <input type="date" class="form-input" id="empJoinDate">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('employeeModal')">Hủy</button>
+                <button class="btn btn-primary" onclick="saveEmployee()">Lưu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Face Registration Modal -->
+    <div class="modal-overlay" id="faceModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Đăng ký khuôn mặt</h3>
+                <button class="modal-close" onclick="closeModal('faceModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-sm mb-4" id="faceEmpName"></p>
+                <div class="form-group">
+                    <label class="form-label">Chọn ảnh khuôn mặt (1-5 ảnh)</label>
+                    <input type="file" class="form-input" id="faceFiles" accept="image/*" multiple
+                           style="padding: 8px;">
+                    <p class="text-xs text-muted mt-4">
+                        💡 Tip: Upload 3-5 ảnh từ các góc khác nhau để tăng độ chính xác nhận diện.
+                    </p>
+                </div>
+                <div id="facePreview" class="flex gap-2" style="flex-wrap: wrap;"></div>
+                <div id="existingFaces" class="mt-6"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('faceModal')">Đóng</button>
+                <button class="btn btn-primary" onclick="uploadFaces()" id="btnUploadFace">📷 Upload & Đăng ký</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        let currentPage = 1;
+        let departments = [];
+        let editingEmployeeId = null;
+        let faceEmployeeId = null;
+
+        async function loadDepartments() {
+            try {
+                departments = await api.getDepartments() || [];
+                const options = '<option value="">Tất cả phòng ban</option>' +
+                    departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+                document.getElementById('deptFilter').innerHTML = options;
+
+                const editOptions = '<option value="">Chọn phòng ban</option>' +
+                    departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+                document.getElementById('empDept').innerHTML = editOptions;
+            } catch (e) {
+                console.error('Load departments error:', e);
+            }
+        }
+
+        async function loadEmployees(page = 1) {
+            currentPage = page;
+            const search = document.getElementById('searchInput').value;
+            const deptId = document.getElementById('deptFilter').value;
+
+            try {
+                const params = { page, page_size: 15 };
+                if (search) params.search = search;
+                if (deptId) params.department_id = deptId;
+
+                const data = await api.getEmployees(params);
+                if (!data) return;
+
+                const tableEl = document.getElementById('employeeTable');
+
+                if (data.items.length === 0) {
+                    tableEl.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">👥</div>
+                            <div class="empty-state-title">Chưa có nhân viên</div>
+                            <div class="empty-state-desc">Thêm nhân viên đầu tiên</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                tableEl.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mã NV</th>
+                                <th>Họ tên</th>
+                                <th>Phòng ban</th>
+                                <th>Chức vụ</th>
+                                <th>Face</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.items.map(emp => `
+                                <tr>
+                                    <td><strong>${emp.employee_code}</strong></td>
+                                    <td>${emp.full_name}</td>
+                                    <td class="text-muted">${emp.department_name || '-'}</td>
+                                    <td class="text-muted">${emp.position || '-'}</td>
+                                    <td>
+                                        ${emp.has_face_registered
+                                            ? `<span class="badge badge-success">✓ ${emp.face_count} ảnh</span>`
+                                            : '<span class="badge badge-muted">Chưa đăng ký</span>'
+                                        }
+                                    </td>
+                                    <td>
+                                        ${emp.is_active
+                                            ? '<span class="badge badge-success">Hoạt động</span>'
+                                            : '<span class="badge badge-danger">Ngừng</span>'
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="flex gap-2">
+                                            <button class="btn btn-outline btn-sm" onclick="openFaceModal(${emp.id}, '${emp.full_name}')" title="Đăng ký mặt">
+                                                📷
+                                            </button>
+                                            <button class="btn btn-outline btn-sm" onclick="editEmployee(${emp.id})" title="Sửa">
+                                                ✏️
+                                            </button>
+                                            <button class="btn btn-outline btn-sm" onclick="deleteEmployee(${emp.id}, '${emp.full_name}')" title="Xóa">
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                // Pagination
+                renderPagination(data.page, data.total_pages);
+
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        function renderPagination(current, total) {
+            const container = document.getElementById('paginationContainer');
+            if (total <= 1) { container.innerHTML = ''; return; }
+
+            let html = '<div class="pagination">';
+            html += `<button class="pagination-btn" ${current <= 1 ? 'disabled' : ''} onclick="loadEmployees(${current - 1})">←</button>`;
+
+            for (let i = 1; i <= total; i++) {
+                if (i === current || i === 1 || i === total || Math.abs(i - current) <= 1) {
+                    html += `<button class="pagination-btn ${i === current ? 'active' : ''}" onclick="loadEmployees(${i})">${i}</button>`;
+                } else if (Math.abs(i - current) === 2) {
+                    html += '<span class="text-muted">...</span>';
+                }
+            }
+
+            html += `<button class="pagination-btn" ${current >= total ? 'disabled' : ''} onclick="loadEmployees(${current + 1})">→</button>`;
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function saveEmployee() {
+            const id = document.getElementById('empId').value;
+            const data = {
+                employee_code: document.getElementById('empCode').value,
+                full_name: document.getElementById('empName').value,
+                email: document.getElementById('empEmail').value || null,
+                phone: document.getElementById('empPhone').value || null,
+                department_id: document.getElementById('empDept').value ? parseInt(document.getElementById('empDept').value) : null,
+                position: document.getElementById('empPosition').value || null,
+                date_of_birth: document.getElementById('empDob').value || null,
+                gender: document.getElementById('empGender').value || null,
+                joined_date: document.getElementById('empJoinDate').value || null,
+            };
+
+            try {
+                if (id) {
+                    await api.updateEmployee(id, data);
+                    toast.success('Thành công', 'Đã cập nhật nhân viên');
+                } else {
+                    await api.createEmployee(data);
+                    toast.success('Thành công', 'Đã thêm nhân viên mới');
+                }
+                closeModal('employeeModal');
+                loadEmployees(currentPage);
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        async function editEmployee(id) {
+            try {
+                const emp = await api.getEmployee(id);
+                if (!emp) return;
+
+                editingEmployeeId = id;
+                document.getElementById('modalTitle').textContent = 'Chỉnh sửa nhân viên';
+                document.getElementById('empId').value = emp.id;
+                document.getElementById('empCode').value = emp.employee_code;
+                document.getElementById('empCode').readOnly = true;
+                document.getElementById('empName').value = emp.full_name;
+                document.getElementById('empEmail').value = emp.email || '';
+                document.getElementById('empPhone').value = emp.phone || '';
+                document.getElementById('empDept').value = emp.department_id || '';
+                document.getElementById('empPosition').value = emp.position || '';
+                document.getElementById('empDob').value = emp.date_of_birth || '';
+                document.getElementById('empGender').value = emp.gender || '';
+                document.getElementById('empJoinDate').value = emp.joined_date || '';
+
+                openModal('employeeModal');
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        async function deleteEmployee(id, name) {
+            if (!confirm(`Bạn có chắc muốn xóa nhân viên "${name}"?`)) return;
+
+            try {
+                await api.deleteEmployee(id);
+                toast.success('Đã xóa', name);
+                loadEmployees(currentPage);
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        // --- Face Registration ---
+        async function openFaceModal(empId, empName) {
+            faceEmployeeId = empId;
+            document.getElementById('faceEmpName').textContent = `Nhân viên: ${empName}`;
+            document.getElementById('faceFiles').value = '';
+            document.getElementById('facePreview').innerHTML = '';
+
+            // Load existing faces
+            try {
+                const data = await api.getEmployeeFaces(empId);
+                const container = document.getElementById('existingFaces');
+                if (data && data.faces.length > 0) {
+                    container.innerHTML = `
+                        <h4 class="text-sm font-bold mb-4">Ảnh đã đăng ký (${data.faces.length})</h4>
+                        ${data.faces.map(f => `
+                            <div class="activity-item">
+                                <div class="activity-avatar">📷</div>
+                                <div class="activity-info">
+                                    <div class="activity-name">Face #${f.id}</div>
+                                    <div class="activity-detail">Quality: ${(f.quality_score * 100).toFixed(0)}%</div>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="deleteFace(${f.id})">🗑️</button>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    container.innerHTML = '<p class="text-xs text-muted">Chưa có ảnh nào được đăng ký</p>';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+
+            openModal('faceModal');
+        }
+
+        async function uploadFaces() {
+            const files = document.getElementById('faceFiles').files;
+            if (!files || files.length === 0) {
+                toast.warning('Chưa chọn ảnh', 'Vui lòng chọn ít nhất 1 ảnh');
+                return;
+            }
+
+            const btn = document.getElementById('btnUploadFace');
+            btn.disabled = true;
+            btn.textContent = 'Đang xử lý...';
+
+            try {
+                const result = await api.registerFace(faceEmployeeId, files);
+                if (result.registered && result.registered.length > 0) {
+                    toast.success('Thành công', `Đã đăng ký ${result.registered.length} ảnh khuôn mặt`);
+                }
+                if (result.errors && result.errors.length > 0) {
+                    result.errors.forEach(err => toast.warning('Cảnh báo', err));
+                }
+                closeModal('faceModal');
+                loadEmployees(currentPage);
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📷 Upload & Đăng ký';
+            }
+        }
+
+        async function deleteFace(encodingId) {
+            if (!confirm('Xóa ảnh khuôn mặt này?')) return;
+            try {
+                await api.deleteFace(encodingId);
+                toast.success('Đã xóa', 'Ảnh khuôn mặt đã được xóa');
+                openFaceModal(faceEmployeeId, document.getElementById('faceEmpName').textContent.replace('Nhân viên: ', ''));
+                loadEmployees(currentPage);
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        // File preview
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('faceFiles')?.addEventListener('change', function() {
+                const preview = document.getElementById('facePreview');
+                preview.innerHTML = '';
+                [...this.files].forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:var(--radius-lg);border:2px solid var(--color-border);';
+                        preview.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+        });
+
+        // Reset modal on new employee
+        document.querySelector('[onclick="openModal(\'employeeModal\')"]')?.addEventListener('click', () => {
+            editingEmployeeId = null;
+            document.getElementById('modalTitle').textContent = 'Thêm nhân viên';
+            document.getElementById('empId').value = '';
+            document.getElementById('empCode').readOnly = false;
+            document.getElementById('employeeForm').reset();
+        });
+
+        // Search & filter events
+        let searchTimeout;
+        document.getElementById('searchInput')?.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => loadEmployees(1), 300);
+        });
+        document.getElementById('deptFilter')?.addEventListener('change', () => loadEmployees(1));
+
+        // Init
+        loadDepartments();
+        loadEmployees();
+    </script>
+</body>
+</html>

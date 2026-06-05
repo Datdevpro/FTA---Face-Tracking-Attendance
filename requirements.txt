@@ -1,0 +1,50 @@
+# ============================================
+# FTA - Face Time Attendance System
+# Python Dependencies
+# ============================================
+
+# If wanna inference model using GPU ONNX, install the following things: 
+# 1. nvidia-cudnn-cu12
+# 2. onnxruntime-gpu==1.22.0
+# 3. CUDA 12.x 
+
+# --- Core Framework ---
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+websockets==15.0.1
+aiofiles==24.1.0
+
+# --- Authentication ---
+python-jose[cryptography]==3.4.0
+passlib[bcrypt]==1.7.4
+
+# --- Database ---
+sqlalchemy==2.0.41
+alembic==1.16.1
+psycopg2-binary==2.9.10
+
+# --- AI / Face Recognition ---
+insightface==0.7.3
+#onnxruntime==1.22.0
+onnxruntime-gpu==1.22.0
+opencv-python==4.11.0.86
+faiss-cpu==1.11.0
+numpy==1.26.4
+Pillow==11.2.1
+scikit-learn==1.6.1
+
+# --- Validation & Settings ---
+pydantic[email]==2.11.4
+pydantic-settings==2.9.1
+python-dotenv==1.1.0
+
+# --- Utilities ---
+openpyxl==3.1.5
+jinja2==3.1.6
+
+# --- Development ---
+httpx==0.28.1
+pytest==8.3.5
+pytest-asyncio==0.26.0
+

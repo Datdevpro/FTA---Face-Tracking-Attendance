@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FTA - Báo cáo chấm công">
+    <title>Báo cáo | FTA</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <h1 class="page-title">📈 Báo cáo</h1>
+                </div>
+                <div class="top-bar-right">
+                    <span class="top-bar-time" id="clock"></span>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <!-- Filter Bar -->
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex gap-4 items-center">
+                        <select class="form-select" id="reportMonth" style="width: 140px;">
+                        </select>
+                        <select class="form-select" id="reportYear" style="width: 120px;">
+                        </select>
+                        <button class="btn btn-primary" onclick="loadReport()">📊 Xem báo cáo</button>
+                    </div>
+                    <button class="btn btn-success" onclick="exportExcel()">
+                        📥 Xuất Excel
+                    </button>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="stats-grid mb-8" id="reportStats" style="display: none;">
+                    <div class="stat-card accent">
+                        <div class="stat-card-icon">👥</div>
+                        <div class="stat-value" id="rptTotalEmp">0</div>
+                        <div class="stat-label">Tổng nhân viên</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-card-icon">📅</div>
+                        <div class="stat-value" id="rptWorkDays">0</div>
+                        <div class="stat-label">Ngày công tháng</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-card-icon">📊</div>
+                        <div class="stat-value" id="rptAvgRate">0%</div>
+                        <div class="stat-label">Tỷ lệ TB</div>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-card-icon">⏰</div>
+                        <div class="stat-value" id="rptTotalLate">0</div>
+                        <div class="stat-label">Tổng ngày trễ</div>
+                    </div>
+                </div>
+
+                <!-- Report Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title" id="reportTitle">Báo cáo chấm công tháng</h2>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-container" id="reportTable">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <div class="empty-state-title">Chọn tháng và năm</div>
+                                <div class="empty-state-desc">Nhấn "Xem báo cáo" để tạo báo cáo</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // Populate month/year selects
+        const now = new Date();
+        const monthSelect = document.getElementById('reportMonth');
+        const yearSelect = document.getElementById('reportYear');
+
+        const months = [
+            'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+            'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+        ];
+
+        months.forEach((m, i) => {
+            const opt = document.createElement('option');
+            opt.value = i + 1;
+            opt.textContent = m;
+            if (i + 1 === now.getMonth() + 1) opt.selected = true;
+            monthSelect.appendChild(opt);
+        });
+
+        for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            yearSelect.appendChild(opt);
+        }
+
+        async function loadReport() {
+            const year = parseInt(yearSelect.value);
+            const month = parseInt(monthSelect.value);
+
+            try {
+                const data = await api.getMonthlyReport(year, month);
+                if (!data || !data.data) return;
+
+                const report = data.data;
+                document.getElementById('reportTitle').textContent =
+                    `Báo cáo chấm công tháng ${month}/${year}`;
+
+                // Stats
+                document.getElementById('reportStats').style.display = '';
+                document.getElementById('rptTotalEmp').textContent = report.length;
+
+                if (report.length > 0) {
+                    document.getElementById('rptWorkDays').textContent = report[0].working_days;
+
+                    const avgRate = report.reduce((sum, r) => sum + r.attendance_rate, 0) / report.length;
+                    document.getElementById('rptAvgRate').textContent = `${avgRate.toFixed(1)}%`;
+
+                    const totalLate = report.reduce((sum, r) => sum + r.late_days, 0);
+                    document.getElementById('rptTotalLate').textContent = totalLate;
+                }
+
+                // Table
+                const tableEl = document.getElementById('reportTable');
+
+                if (report.length === 0) {
+                    tableEl.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📊</div>
+                            <div class="empty-state-title">Không có dữ liệu</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                tableEl.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Mã NV</th>
+                                <th>Họ tên</th>
+                                <th>Phòng ban</th>
+                                <th>Ngày công</th>
+                                <th>Đúng giờ</th>
+                                <th>Đi trễ</th>
+                                <th>Nửa ngày</th>
+                                <th>Vắng</th>
+                                <th>Tỷ lệ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${report.map((r, i) => `
+                                <tr>
+                                    <td class="text-muted">${i + 1}</td>
+                                    <td><strong>${r.employee_code}</strong></td>
+                                    <td>${r.employee_name}</td>
+                                    <td class="text-muted">${r.department || '-'}</td>
+                                    <td style="text-align:center;">${r.working_days}</td>
+                                    <td style="text-align:center;">
+                                        <span class="text-success font-bold">${r.present_days}</span>
+                                    </td>
+                                    <td style="text-align:center;">
+                                        ${r.late_days > 0
+                                            ? `<span class="text-warning font-bold">${r.late_days}</span>`
+                                            : '<span class="text-muted">0</span>'
+                                        }
+                                    </td>
+                                    <td style="text-align:center;">
+                                        ${r.half_days > 0 ? r.half_days : '<span class="text-muted">0</span>'}
+                                    </td>
+                                    <td style="text-align:center;">
+                                        ${r.absent_days > 0
+                                            ? `<span class="text-danger font-bold">${r.absent_days}</span>`
+                                            : '<span class="text-muted">0</span>'
+                                        }
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <span class="badge ${
+                                            r.attendance_rate >= 90 ? 'badge-success' :
+                                            r.attendance_rate >= 75 ? 'badge-warning' : 'badge-danger'
+                                        }">${r.attendance_rate}%</span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        async function exportExcel() {
+            const year = parseInt(yearSelect.value);
+            const month = parseInt(monthSelect.value);
+
+            try {
+                toast.info('Đang xuất', 'Đang tạo file Excel...');
+                await api.exportExcel(year, month);
+                toast.success('Thành công', 'Đã tải file Excel');
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+    </script>
+</body>
+</html>

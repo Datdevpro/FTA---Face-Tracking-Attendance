@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FTA - Camera trực tiếp nhận diện khuôn mặt">
+    <title>Camera trực tiếp | FTA</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <h1 class="page-title">📹 Camera trực tiếp</h1>
+                </div>
+                <div class="top-bar-right">
+                    <span class="top-bar-time" id="clock"></span>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <div class="grid-2">
+                    <!-- Camera Feed -->
+                    <div>
+                        <div class="card mb-6">
+                            <div class="card-header">
+                                <h2 class="card-title">Camera Feed</h2>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-success btn-sm" id="btnStartCamera" onclick="startStream()">
+                                        ▶ Bắt đầu
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" id="btnStopCamera" onclick="stopStream()" style="display:none;">
+                                        ⏹ Dừng
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding: 0;">
+                                <div class="camera-container" id="cameraContainer">
+                                    <img class="camera-feed" id="cameraFeed" alt="Camera feed"
+                                         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23111827'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%2364748b' font-size='16' font-family='Inter'%3ECamera chưa kết nối%3C/text%3E%3C/svg%3E">
+                                    <div class="camera-status-bar">
+                                        <span class="status-dot" id="cameraStatusDot"></span>
+                                        <span id="cameraStatusText">Offline</span>
+                                    </div>
+                                    <div class="camera-fps" id="cameraFps"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detected Faces -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">Khuôn mặt phát hiện</h2>
+                                <span class="badge badge-info" id="faceCount">0 faces</span>
+                            </div>
+                            <div class="card-body" id="detectedFaces">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">🔍</div>
+                                    <div class="empty-state-desc">Bắt đầu camera để nhận diện</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Attendance Log -->
+                    <div>
+                        <div class="card" style="height: 100%;">
+                            <div class="card-header">
+                                <h2 class="card-title">Chấm công hôm nay</h2>
+                                <span class="badge badge-success" id="attendanceCount">0</span>
+                            </div>
+                            <div class="card-body" id="attendanceLog" style="max-height: 600px; overflow-y: auto;">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📋</div>
+                                    <div class="empty-state-title">Đang chờ...</div>
+                                    <div class="empty-state-desc">Sự kiện chấm công sẽ hiển thị ở đây</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        let ws = null;
+        let isStreaming = false;
+        const attendanceEvents = [];
+
+        function startStream() {
+            if (isStreaming) return;
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/camera-stream`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                isStreaming = true;
+                document.getElementById('btnStartCamera').style.display = 'none';
+                document.getElementById('btnStopCamera').style.display = '';
+                document.getElementById('cameraStatusDot').className = 'status-dot online';
+                document.getElementById('cameraStatusText').textContent = 'Live';
+                toast.success('Camera', 'Đã kết nối camera thành công');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'frame') {
+                    // Update camera feed
+                    const feed = document.getElementById('cameraFeed');
+                    feed.src = `data:image/jpeg;base64,${data.frame}`;
+
+                    // Update FPS
+                    document.getElementById('cameraFps').textContent =
+                        `${data.process_time_ms}ms`;
+
+                    // Update face count
+                    document.getElementById('faceCount').textContent =
+                        `${data.faces.length} face${data.faces.length !== 1 ? 's' : ''}`;
+
+                    // Update detected faces panel
+                    updateDetectedFaces(data.faces);
+
+                    // Process attendance events
+                    if (data.attendance_events && data.attendance_events.length > 0) {
+                        data.attendance_events.forEach(event => {
+                            attendanceEvents.unshift(event);
+                            toast.success(
+                                event.action === 'CHECK_IN' ? 'Check-in' : 'Check-out',
+                                `${event.employee_name} (${event.employee_code})`
+                            );
+                        });
+                        updateAttendanceLog();
+                    }
+                } else if (data.type === 'error') {
+                    toast.error('Camera Error', data.message);
+                }
+            };
+
+            ws.onclose = () => {
+                isStreaming = false;
+                document.getElementById('btnStartCamera').style.display = '';
+                document.getElementById('btnStopCamera').style.display = 'none';
+                document.getElementById('cameraStatusDot').className = 'status-dot offline';
+                document.getElementById('cameraStatusText').textContent = 'Offline';
+            };
+
+            ws.onerror = (error) => {
+                toast.error('WebSocket Error', 'Mất kết nối với server');
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function stopStream() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            isStreaming = false;
+        }
+
+        function updateDetectedFaces(faces) {
+            const container = document.getElementById('detectedFaces');
+            if (!faces || faces.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="padding: var(--space-4);">
+                        <div class="empty-state-desc">Không phát hiện khuôn mặt</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = faces.map(f => `
+                <div class="activity-item">
+                    <div class="activity-avatar" style="${
+                        f.employee_id ? 'background: var(--color-success-soft); color: var(--color-success);' :
+                        !f.is_live ? 'background: var(--color-danger-soft); color: var(--color-danger);' :
+                        'background: var(--color-warning-soft); color: var(--color-warning);'
+                    }">
+                        ${f.employee_id ? '✓' : !f.is_live ? '⚠' : '?'}
+                    </div>
+                    <div class="activity-info">
+                        <div class="activity-name">${f.name}</div>
+                        <div class="activity-detail">
+                            ${f.similarity ? `Similarity: ${(f.similarity * 100).toFixed(1)}%` : ''}
+                            ${f.det_score ? ` · Det: ${(f.det_score * 100).toFixed(0)}%` : ''}
+                        </div>
+                    </div>
+                    ${f.employee_id
+                        ? '<span class="badge badge-success">Đã nhận diện</span>'
+                        : !f.is_live
+                        ? '<span class="badge badge-danger">Giả mạo</span>'
+                        : '<span class="badge badge-warning">Chưa đăng ký</span>'
+                    }
+                </div>
+            `).join('');
+        }
+
+        function updateAttendanceLog() {
+            const container = document.getElementById('attendanceLog');
+            document.getElementById('attendanceCount').textContent = attendanceEvents.length;
+
+            if (attendanceEvents.length === 0) return;
+
+            container.innerHTML = attendanceEvents.slice(0, 50).map(e => `
+                <div class="activity-item">
+                    <div class="activity-avatar">${getInitials(e.employee_name)}</div>
+                    <div class="activity-info">
+                        <div class="activity-name">${e.employee_name}</div>
+                        <div class="activity-detail">
+                            ${e.employee_code} ·
+                            ${e.action === 'CHECK_IN' ? '🟢 Check-in' : '🔴 Check-out'}
+                        </div>
+                    </div>
+                    <div>
+                        ${statusBadge(e.status)}
+                    </div>
+                    <span class="activity-time">${new Date(e.time).toLocaleTimeString('vi-VN')}</span>
+                </div>
+            `).join('');
+        }
+
+        // Load today's existing attendance on page load
+        async function loadTodayAttendance() {
+            try {
+                const today = await api.getTodayAttendance();
+                if (today && today.length > 0) {
+                    today.forEach(r => {
+                        attendanceEvents.push({
+                            employee_name: r.employee_name,
+                            employee_code: r.employee_code,
+                            action: 'CHECK_IN',
+                            time: r.check_in_time,
+                            status: r.status,
+                        });
+                    });
+                    updateAttendanceLog();
+                }
+            } catch (e) {
+                console.error('Load today attendance error:', e);
+            }
+        }
+
+        loadTodayAttendance();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (ws) ws.close();
+        });
+    </script>
+</body>
+</html>

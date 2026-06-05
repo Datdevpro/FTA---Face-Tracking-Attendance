@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FTA - Lịch sử chấm công">
+    <title>Chấm công | FTA</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <h1 class="page-title">📋 Chấm công</h1>
+                </div>
+                <div class="top-bar-right">
+                    <span class="top-bar-time" id="clock"></span>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <!-- Filters -->
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex gap-4">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <input type="date" class="form-input" id="dateFilter" style="width: 180px;">
+                        </div>
+                        <select class="form-select" id="statusFilter" style="width: 160px;">
+                            <option value="">Tất cả trạng thái</option>
+                            <option value="PRESENT">Đúng giờ</option>
+                            <option value="LATE">Đi trễ</option>
+                            <option value="ABSENT">Vắng mặt</option>
+                            <option value="HALF_DAY">Nửa ngày</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="openModal('manualModal')">
+                        ✏️ Chấm công thủ công
+                    </button>
+                </div>
+
+                <!-- Attendance Table -->
+                <div class="card">
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-container" id="attendanceTable">
+                            <div class="loading-overlay">
+                                <div class="spinner"></div>
+                                <div class="loading-text">Đang tải...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer" id="paginationContainer"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Manual Attendance Modal -->
+    <div class="modal-overlay" id="manualModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Chấm công thủ công</h3>
+                <button class="modal-close" onclick="closeModal('manualModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Nhân viên *</label>
+                    <select class="form-select" id="manualEmployee" required>
+                        <option value="">Chọn nhân viên</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ngày *</label>
+                    <input type="date" class="form-input" id="manualDate" required>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Giờ vào</label>
+                        <input type="datetime-local" class="form-input" id="manualCheckIn">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Giờ ra</label>
+                        <input type="datetime-local" class="form-input" id="manualCheckOut">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Trạng thái</label>
+                    <select class="form-select" id="manualStatus">
+                        <option value="PRESENT">Đúng giờ</option>
+                        <option value="LATE">Đi trễ</option>
+                        <option value="HALF_DAY">Nửa ngày</option>
+                        <option value="ABSENT">Vắng mặt</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ghi chú</label>
+                    <textarea class="form-textarea" id="manualNote" rows="2" placeholder="Lý do..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('manualModal')">Hủy</button>
+                <button class="btn btn-primary" onclick="saveManualAttendance()">Lưu</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        let currentPage = 1;
+
+        // Set default date to today
+        document.getElementById('dateFilter').value = new Date().toISOString().split('T')[0];
+        document.getElementById('manualDate').value = new Date().toISOString().split('T')[0];
+
+        async function loadAttendance(page = 1) {
+            currentPage = page;
+            const dateVal = document.getElementById('dateFilter').value;
+            const statusVal = document.getElementById('statusFilter').value;
+
+            const params = { page, page_size: 20 };
+            if (dateVal) params.attendance_date = dateVal;
+            if (statusVal) params.status = statusVal;
+
+            try {
+                const data = await api.getAttendance(params);
+                if (!data) return;
+
+                const tableEl = document.getElementById('attendanceTable');
+
+                if (data.items.length === 0) {
+                    tableEl.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div class="empty-state-title">Không có dữ liệu</div>
+                            <div class="empty-state-desc">Không có bản ghi chấm công cho ngày này</div>
+                        </div>
+                    `;
+                    document.getElementById('paginationContainer').innerHTML = '';
+                    return;
+                }
+
+                tableEl.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mã NV</th>
+                                <th>Họ tên</th>
+                                <th>Phòng ban</th>
+                                <th>Ngày</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
+                                <th>Trạng thái</th>
+                                <th>Nguồn</th>
+                                <th>Độ tin cậy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.items.map(r => `
+                                <tr>
+                                    <td><strong>${r.employee_code || ''}</strong></td>
+                                    <td>${r.employee_name || ''}</td>
+                                    <td class="text-muted">${r.department_name || '-'}</td>
+                                    <td>${formatDate(r.attendance_date)}</td>
+                                    <td>${r.check_in_time ? formatTime(r.check_in_time) : '-'}</td>
+                                    <td>${r.check_out_time ? formatTime(r.check_out_time) : '-'}</td>
+                                    <td>${statusBadge(r.status)}</td>
+                                    <td class="text-xs text-muted">
+                                        ${r.source === 'CAMERA_AUTO' ? '📹 Camera' : '✏️ Thủ công'}
+                                    </td>
+                                    <td class="text-xs">
+                                        ${r.check_in_confidence ? `${(r.check_in_confidence * 100).toFixed(0)}%` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                // Pagination
+                const totalPages = Math.ceil(data.total / 20);
+                renderPagination(currentPage, totalPages);
+
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        function renderPagination(current, total) {
+            const container = document.getElementById('paginationContainer');
+            if (total <= 1) { container.innerHTML = ''; return; }
+
+            let html = '<div class="pagination">';
+            html += `<button class="pagination-btn" ${current <= 1 ? 'disabled' : ''} onclick="loadAttendance(${current - 1})">←</button>`;
+            for (let i = 1; i <= Math.min(total, 10); i++) {
+                html += `<button class="pagination-btn ${i === current ? 'active' : ''}" onclick="loadAttendance(${i})">${i}</button>`;
+            }
+            html += `<button class="pagination-btn" ${current >= total ? 'disabled' : ''} onclick="loadAttendance(${current + 1})">→</button>`;
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function saveManualAttendance() {
+            const empId = document.getElementById('manualEmployee').value;
+            const dateVal = document.getElementById('manualDate').value;
+
+            if (!empId || !dateVal) {
+                toast.warning('Thiếu thông tin', 'Vui lòng chọn nhân viên và ngày');
+                return;
+            }
+
+            const data = {
+                employee_id: parseInt(empId),
+                attendance_date: dateVal,
+                check_in_time: document.getElementById('manualCheckIn').value || null,
+                check_out_time: document.getElementById('manualCheckOut').value || null,
+                status: document.getElementById('manualStatus').value,
+                note: document.getElementById('manualNote').value || null,
+            };
+
+            try {
+                await api.createManualAttendance(data);
+                toast.success('Thành công', 'Đã lưu chấm công thủ công');
+                closeModal('manualModal');
+                loadAttendance(currentPage);
+            } catch (e) {
+                toast.error('Lỗi', e.message);
+            }
+        }
+
+        // Load employee list for manual attendance
+        async function loadEmployeeOptions() {
+            try {
+                const data = await api.getEmployees({ page_size: 100, is_active: true });
+                if (data && data.items) {
+                    const select = document.getElementById('manualEmployee');
+                    select.innerHTML = '<option value="">Chọn nhân viên</option>' +
+                        data.items.map(e => `<option value="${e.id}">${e.employee_code} - ${e.full_name}</option>`).join('');
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Filter events
+        document.getElementById('dateFilter').addEventListener('change', () => loadAttendance(1));
+        document.getElementById('statusFilter').addEventListener('change', () => loadAttendance(1));
+
+        // Init
+        loadAttendance();
+        loadEmployeeOptions();
+    </script>
+</body>
+</html>
