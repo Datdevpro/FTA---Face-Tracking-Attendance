@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # --- Anti-Spoofing ---
     ANTI_SPOOFING_ENABLED: bool = True
     ANTI_SPOOFING_THRESHOLD: float = 0.5
+    ANTI_SPOOFING_INTERVAL_FRAMES: int = 5
 
     # --- Attendance ---
     ATTENDANCE_COOLDOWN_SECONDS: int = 1800
