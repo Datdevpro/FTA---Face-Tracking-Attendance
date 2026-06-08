@@ -23,6 +23,8 @@ from app.core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 _employee_name_cache = {}
+_liveness_cache = {}
+_stream_frame_counter = 0
 
 # Processing frame rate for recognition (lower = less CPU)
 PROCESS_FPS = 5
@@ -50,12 +52,14 @@ async def camera_stream_handler(
     """
     await websocket.accept()
     logger.info("WebSocket client connected for camera stream")
+    global _stream_frame_counter
 
     if not camera_service.is_running:
         camera_service.start()
 
     try:
         while True:
+            _stream_frame_counter += 1
             start_time = time.time()
 
             # Get frame from camera
@@ -77,6 +81,7 @@ async def camera_stream_handler(
                 None,
                 _process_frame,
                 frame,
+                _stream_frame_counter,
                 face_service,
                 face_index,
                 anti_spoofing,
@@ -119,11 +124,13 @@ async def camera_stream_handler(
         except Exception:
             pass
     finally:
+        _liveness_cache.clear()
         camera_service.stop()
 
 
 def _process_frame(
     frame: np.ndarray,
+    frame_index: int,
     face_service,
     face_index,
     anti_spoofing,
@@ -161,29 +168,9 @@ def _process_frame(
             employee_id = None
             similarity = 0.0
             is_live = True
+            liveness_score = None
+            liveness_checked = False
             color = (0, 0, 255)  # Red for unknown
-
-            # Anti-spoofing check
-            if settings.ANTI_SPOOFING_ENABLED:
-                is_live, liveness_score = anti_spoofing.check_liveness(
-                    frame, bbox
-                )
-                if not is_live:
-                    name = "SPOOF DETECTED"
-                    color = (0, 0, 255)
-                    faces_data.append({
-                        "name": name,
-                        "bbox": [x1, y1, x2, y2],
-                        "is_live": False,
-                        "liveness_score": round(liveness_score, 3),
-                    })
-                    # Draw red bbox for spoof
-                    cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(
-                        annotated, name, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2
-                    )
-                    continue
 
             # Search in FAISS index
             matches = face_index.search(
@@ -196,15 +183,28 @@ def _process_frame(
                 color = (0, 255, 0)  # Green for recognized
                 name = _get_employee_name(employee_id)
 
+                if settings.ANTI_SPOOFING_ENABLED:
+                    is_live, liveness_score, liveness_checked = _get_liveness_result(
+                        employee_id,
+                        frame_index,
+                        frame,
+                        bbox,
+                        anti_spoofing,
+                    )
+                    if not is_live:
+                        name = "SPOOF DETECTED"
+                        color = (0, 0, 255)
+
                 db: Session = SessionLocal()
                 try:
-                    event = attendance_service.process_recognition(
-                        db=db,
-                        employee_id=employee_id,
-                        confidence=similarity,
-                    )
-                    if event:
-                        attendance_events.append(event)
+                    if is_live:
+                        event = attendance_service.process_recognition(
+                            db=db,
+                            employee_id=employee_id,
+                            confidence=similarity,
+                        )
+                        if event:
+                            attendance_events.append(event)
                 finally:
                     db.close()
 
@@ -235,6 +235,8 @@ def _process_frame(
                 "bbox": [x1, y1, x2, y2],
                 "det_score": round(face.det_score, 3),
                 "is_live": is_live,
+                "liveness_score": round(liveness_score, 3) if liveness_score is not None else None,
+                "liveness_checked": liveness_checked,
             })
 
     except Exception as e:
@@ -271,3 +273,26 @@ def _get_employee_name(employee_id: int) -> str:
         db.close()
 
     return "Unknown"
+
+
+def _get_liveness_result(
+    employee_id: int,
+    frame_index: int,
+    frame: np.ndarray,
+    bbox: np.ndarray,
+    anti_spoofing,
+) -> tuple[bool, float, bool]:
+    interval = max(1, settings.ANTI_SPOOFING_INTERVAL_FRAMES)
+    cached = _liveness_cache.get(employee_id)
+
+    if cached and frame_index % interval != 0:
+        return cached["is_live"], cached["score"], False
+
+    is_live, score = anti_spoofing.check_liveness(frame, bbox)
+    _liveness_cache[employee_id] = {
+        "is_live": is_live,
+        "score": score,
+        "frame_index": frame_index,
+        "checked_at": time.time(),
+    }
+    return is_live, score, True
