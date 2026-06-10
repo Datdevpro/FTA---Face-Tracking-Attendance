@@ -177,6 +177,22 @@ def update_employee(
         )
 
     update_data = data.model_dump(exclude_unset=True)
+
+    if "employee_code" in update_data and update_data["employee_code"] != employee.employee_code:
+        existing = (
+            db.query(Employee)
+            .filter(
+                Employee.employee_code == update_data["employee_code"],
+                Employee.id != employee_id,
+            )
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Employee code '{update_data['employee_code']}' already exists",
+            )
+
     for key, value in update_data.items():
         setattr(employee, key, value)
 

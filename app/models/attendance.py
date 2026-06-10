@@ -2,6 +2,7 @@
 Attendance record database model.
 """
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy import (
     Boolean,
     Column,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     func,
     UniqueConstraint,
 )
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
