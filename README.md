@@ -4,7 +4,7 @@ Hệ thống chấm công nhân sự bằng nhận diện khuôn mặt (Face Rec
 
 ## 🚀 Tính năng
 
-- **Nhận diện khuôn mặt real-time** bằng InsightFace (ArcFace) + FAISS
+- **Nhận diện khuôn mặt real-time** bằng InsightFace (ArcFace) + FAISS, Không cần retrain khi có data mới
 - **Chấm công tự động** khi nhận diện được nhân viên qua camera
 - **Chống giả mạo** (Anti-spoofing) - phát hiện ảnh in, màn hình
 - **Dashboard trực quan** với thống kê real-time
@@ -23,9 +23,9 @@ Hệ thống chấm công nhân sự bằng nhận diện khuôn mặt (Face Rec
 
 ```bash
 # 1. Clone & tạo virtual environment
-cd d:\datworkspace\FTA
-python -m venv FTA_venv
-.\FTA_venv\Scripts\activate
+clone https://github.com/Datdevpro/FTA---Face-Tracking-Attendance.git
+python -m venv {your_venv_name}
+.\your_venv_name\Scripts\activate
 
 # 2. Cài đặt dependencies
 pip install -r requirements.txt
@@ -79,6 +79,6 @@ FTA/
 ## 📊 Performance
 
 - Face Detection: ~30-40ms/frame (CPU)
-- Face Embedding: ~20-30ms/face (CPU)
+- Face Embedding: ~20-30ms/face (CPU) - 512 embedding vector
 - FAISS Search (50 users): <1ms
 - **Total pipeline: ~60-80ms/face** (10+ FPS real-time)
