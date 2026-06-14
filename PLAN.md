@@ -1,7 +1,7 @@
 # Kế Hoạch Đưa FTA Thành Bản SaaS Cloud Dùng Thử
 
 ## Summary
-
+## Summary the future plan to implementation
 Mục tiêu là chuyển hệ thống hiện tại từ app chấm công local đơn công ty sang bản **SaaS cloud multi-company** có thể cho người dùng dùng thử. Quyết định đã khóa:
 
 - Deploy target: **Cloud**
