@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     FACE_MODEL_NAME: str = "buffalo_l"
     FACE_ONNX_PROVIDER: str = "cuda"
     FACE_DETECTION_THRESHOLD: float = 0.5
-    FACE_RECOGNITION_THRESHOLD: float = 0.4
+    FACE_RECOGNITION_THRESHOLD: float = 0.5
     FACE_MIN_QUALITY: float = 0.3
     FACE_REGISTRATION_COUNT: int = 3
 
@@ -48,8 +48,8 @@ class Settings(BaseSettings):
 
     # --- Attendance ---
     ATTENDANCE_COOLDOWN_SECONDS: int = 1800
-    WORK_START_TIME: str = "08:00"
-    WORK_END_TIME: str = "17:00"
+    WORK_START_TIME: str = "08:30"
+    WORK_END_TIME: str = "17:30"
     LATE_THRESHOLD_MINUTES: int = 15
 
     # --- File Storage ---
