@@ -25,10 +25,7 @@ logger = logging.getLogger(__name__)
 _employee_name_cache = {}
 _liveness_cache = {}
 _stream_frame_counter = 0
-
-# Processing frame rate for recognition (lower = less CPU)
-PROCESS_FPS = 5
-FRAME_INTERVAL = 1.0 / PROCESS_FPS
+_recognition_frame_counter = 0
 
 # Max frame dimension for detection (resize larger frames)
 MAX_DETECT_DIM = 480
@@ -52,15 +49,27 @@ async def camera_stream_handler(
     """
     await websocket.accept()
     logger.info("WebSocket client connected for camera stream")
-    global _stream_frame_counter
+    global _stream_frame_counter, _recognition_frame_counter
 
     if not camera_service.is_running:
         camera_service.start()
+
+    loop = asyncio.get_event_loop()
+    preview_interval = 1.0 / max(1, settings.STREAM_PREVIEW_FPS)
+    recognition_interval = max(1, settings.RECOGNITION_INTERVAL_FRAMES)
+    max_stale_seconds = max(0, settings.RECOGNITION_MAX_STALE_MS) / 1000
+
+    recognition_future = None
+    latest_faces = []
+    latest_recognition_time_ms = None
+    latest_recognition_at = 0.0
 
     try:
         while True:
             _stream_frame_counter += 1
             start_time = time.time()
+            attendance_events = []
+            recognition_ran = False
 
             # Get frame from camera
             frame = camera_service.get_frame()
@@ -75,22 +84,45 @@ async def camera_stream_handler(
                 await asyncio.sleep(0.2)
                 continue
 
-            # Run face detection and recognition in thread pool
-            # to avoid blocking the async event loop
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                _process_frame,
-                frame,
-                _stream_frame_counter,
-                face_service,
-                face_index,
-                anti_spoofing,
-                attendance_service,
-            )
+            if recognition_future and recognition_future.done():
+                try:
+                    result = recognition_future.result()
+                    latest_faces = result["faces"]
+                    attendance_events = result["attendance_events"]
+                    latest_recognition_time_ms = result["recognition_time_ms"]
+                    latest_recognition_at = time.time()
+                    recognition_ran = True
+                except Exception as e:
+                    logger.error(f"Recognition worker error: {e}")
+                finally:
+                    recognition_future = None
 
-            annotated_frame = result["annotated_frame"]
-            faces_data = result["faces"]
-            attendance_events = result["attendance_events"]
+            should_run_recognition = (
+                recognition_future is None
+                and (
+                    latest_recognition_at == 0
+                    or _stream_frame_counter % recognition_interval == 0
+                )
+            )
+            if should_run_recognition:
+                _recognition_frame_counter += 1
+                recognition_future = loop.run_in_executor(
+                    None,
+                    _run_recognition,
+                    frame.copy(),
+                    _recognition_frame_counter,
+                    face_service,
+                    face_index,
+                    anti_spoofing,
+                    attendance_service,
+                )
+
+            recognition_age = time.time() - latest_recognition_at if latest_recognition_at else None
+            display_faces = latest_faces
+            if recognition_age is not None and max_stale_seconds and recognition_age > max_stale_seconds:
+                display_faces = []
+
+            annotated_frame = _draw_overlay(frame, display_faces)
 
             # Encode frame as JPEG base64
             _, buffer = cv2.imencode(
@@ -102,16 +134,20 @@ async def camera_stream_handler(
             message = {
                 "type": "frame",
                 "frame": frame_b64,
-                "faces": faces_data,
+                "faces": display_faces,
                 "attendance_events": attendance_events,
                 "timestamp": datetime.now().isoformat(),
                 "process_time_ms": round((time.time() - start_time) * 1000, 1),
+                "recognition_time_ms": latest_recognition_time_ms,
+                "recognition_age_ms": round(recognition_age * 1000, 1) if recognition_age is not None else None,
+                "recognition_pending": recognition_future is not None,
+                "recognition_ran": recognition_ran,
             }
             await websocket.send_json(message)
 
-            # Frame rate control
+            # Preview frame rate control
             elapsed = time.time() - start_time
-            sleep_time = max(0, FRAME_INTERVAL - elapsed)
+            sleep_time = max(0, preview_interval - elapsed)
             if sleep_time > 0:
                 await asyncio.sleep(sleep_time)
 
@@ -128,19 +164,19 @@ async def camera_stream_handler(
         camera_service.stop()
 
 
-def _process_frame(
+def _run_recognition(
     frame: np.ndarray,
-    frame_index: int,
+    recognition_index: int,
     face_service,
     face_index,
     anti_spoofing,
     attendance_service,
 ) -> dict:
     """
-    Process a single frame: detect faces, recognize, check attendance.
+    Run face detection, recognition, liveness, and attendance.
     Runs in a thread pool executor.
     """
-    annotated = frame.copy()
+    start_time = time.time()
     faces_data = []
     attendance_events = []
 
@@ -186,7 +222,7 @@ def _process_frame(
                 if settings.ANTI_SPOOFING_ENABLED:
                     is_live, liveness_score, liveness_checked = _get_liveness_result(
                         employee_id,
-                        frame_index,
+                        recognition_index,
                         frame,
                         bbox,
                         anti_spoofing,
@@ -208,26 +244,6 @@ def _process_frame(
                 finally:
                     db.close()
 
-            # Draw bounding box and name
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-
-            # Label background
-            label = f"{name} ({similarity:.0%})" if employee_id else name
-            label_size, _ = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-            )
-            cv2.rectangle(
-                annotated,
-                (x1, y1 - label_size[1] - 10),
-                (x1 + label_size[0], y1),
-                color,
-                -1,
-            )
-            cv2.putText(
-                annotated, label, (x1, y1 - 5),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
-            )
-
             faces_data.append({
                 "name": name,
                 "employee_id": employee_id,
@@ -242,6 +258,49 @@ def _process_frame(
     except Exception as e:
         logger.error(f"Frame processing error: {e}")
 
+    return {
+        "faces": faces_data,
+        "attendance_events": attendance_events,
+        "recognition_time_ms": round((time.time() - start_time) * 1000, 1),
+    }
+
+
+def _draw_overlay(frame: np.ndarray, faces_data: list[dict]) -> np.ndarray:
+    """Draw the latest recognition result on a preview frame."""
+    annotated = frame.copy()
+
+    for face in faces_data:
+        x1, y1, x2, y2 = [int(v) for v in face.get("bbox", [0, 0, 0, 0])]
+        employee_id = face.get("employee_id")
+        name = face.get("name") or "Unknown"
+        similarity = float(face.get("similarity") or 0.0)
+        is_live = face.get("is_live", True)
+
+        if not is_live:
+            color = (0, 0, 255)
+        elif employee_id:
+            color = (0, 255, 0)
+        else:
+            color = (0, 0, 255)
+
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+
+        label = f"{name} ({similarity:.0%})" if employee_id and is_live else name
+        label_size, _ = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+        )
+        cv2.rectangle(
+            annotated,
+            (x1, y1 - label_size[1] - 10),
+            (x1 + label_size[0], y1),
+            color,
+            -1,
+        )
+        cv2.putText(
+            annotated, label, (x1, y1 - 5),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
+        )
+
     # Draw timestamp
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cv2.putText(
@@ -249,11 +308,7 @@ def _process_frame(
         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
     )
 
-    return {
-        "annotated_frame": annotated,
-        "faces": faces_data,
-        "attendance_events": attendance_events,
-    }
+    return annotated
 
 
 def _get_employee_name(employee_id: int) -> str:
