@@ -173,3 +173,8 @@ Trọng tâm không chỉ là deploy, mà là sửa kiến trúc camera, dữ li
 - Anti-spoofing giai đoạn đầu chỉ là cảnh báo/cản cơ bản, chưa cam kết chống ảnh điện thoại tuyệt đối.
 - PostgreSQL là database production.
 - Object storage cho ảnh có thể để phase sau nếu pilot nhỏ, nhưng DB production không dùng SQLite.
+
+
+
+
+<!-- ngay tại ô  " Chấm công hôm nay", hãy chia ra làm 2 ô: "chấm công hôm  nay" nằm trên và ô "Thông tin nhân sự" -->

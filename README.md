@@ -34,6 +34,10 @@ pip install -r requirements.txt
 python -m scripts.init_db
 
 # 4. Chạy server
+.\start-fta.ps1
+# hoặc double-click start-fta.bat trên Windows
+
+# Chạy thủ công nếu cần
 python -m app.main
 # hoặc
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
