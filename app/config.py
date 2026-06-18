@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     CAMERA_WIDTH: int = 640
     CAMERA_HEIGHT: int = 480
     CAMERA_FPS: int = 30
+    STREAM_PREVIEW_FPS: int = 15
+    RECOGNITION_INTERVAL_FRAMES: int = 5
+    RECOGNITION_MAX_STALE_MS: int = 1000
 
     # --- Face Recognition ---
     FACE_MODEL_NAME: str = "buffalo_l"

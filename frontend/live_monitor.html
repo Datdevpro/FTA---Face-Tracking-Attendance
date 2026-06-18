@@ -127,8 +127,11 @@
                     feed.src = `data:image/jpeg;base64,${data.frame}`;
 
                     // Update FPS
+                    const aiTime = data.recognition_time_ms !== null && data.recognition_time_ms !== undefined
+                        ? ` · AI ${data.recognition_time_ms}ms`
+                        : '';
                     document.getElementById('cameraFps').textContent =
-                        `${data.process_time_ms}ms`;
+                        `Preview ${data.process_time_ms}ms${aiTime}`;
 
                     // Update face count
                     document.getElementById('faceCount').textContent =

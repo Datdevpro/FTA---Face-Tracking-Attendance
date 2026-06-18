@@ -130,7 +130,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 class="modal-title">Đăng ký khuôn mặt</h3>
-                <button class="modal-close" onclick="closeModal('faceModal')">✕</button>
+                <button class="modal-close" onclick="closeFaceModal()">✕</button>
             </div>
             <div class="modal-body">
                 <p class="text-sm mb-4" id="faceEmpName"></p>
@@ -143,10 +143,30 @@
                     </p>
                 </div>
                 <div id="facePreview" class="flex gap-2" style="flex-wrap: wrap;"></div>
+                <div class="form-group mt-6">
+                    <label class="form-label">Chụp ảnh trực tiếp bằng camera</label>
+                    <div class="flex gap-2 mb-4" style="flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="startFaceCamera()" id="btnStartFaceCamera">
+                            ▶ Bật camera
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="captureFacePhoto()" id="btnCaptureFace" style="display:none;">
+                            📸 Chụp ảnh
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="stopFaceCamera()" id="btnStopFaceCamera" style="display:none;">
+                            ■ Tắt camera
+                        </button>
+                    </div>
+                    <video id="faceCameraVideo" autoplay playsinline muted
+                           style="display:none;width:100%;max-height:280px;object-fit:cover;border-radius:var(--radius-lg);border:1px solid var(--color-border);background:#000;"></video>
+                    <canvas id="faceCaptureCanvas" style="display:none;"></canvas>
+                    <p class="text-xs text-muted mt-4">
+                        Nên chụp 3-5 ảnh rõ mặt, khác góc nhẹ, đủ sáng.
+                    </p>
+                </div>
                 <div id="existingFaces" class="mt-6"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" onclick="closeModal('faceModal')">Đóng</button>
+                <button class="btn btn-outline" onclick="closeFaceModal()">Đóng</button>
                 <button class="btn btn-primary" onclick="uploadFaces()" id="btnUploadFace">📷 Upload & Đăng ký</button>
             </div>
         </div>
@@ -159,6 +179,8 @@
         let departments = [];
         let editingEmployeeId = null;
         let faceEmployeeId = null;
+        let faceCameraStream = null;
+        let capturedFaceFiles = [];
 
         async function loadDepartments() {
             try {
@@ -349,9 +371,11 @@
         // --- Face Registration ---
         async function openFaceModal(empId, empName) {
             faceEmployeeId = empId;
+            stopFaceCamera();
+            capturedFaceFiles = [];
             document.getElementById('faceEmpName').textContent = `Nhân viên: ${empName}`;
             document.getElementById('faceFiles').value = '';
-            document.getElementById('facePreview').innerHTML = '';
+            renderFacePreview();
 
             // Load existing faces
             try {
@@ -381,10 +405,127 @@
             openModal('faceModal');
         }
 
+        function closeFaceModal() {
+            stopFaceCamera();
+            closeModal('faceModal');
+        }
+
+        async function startFaceCamera() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                toast.error('Camera', 'Trình duyệt không hỗ trợ mở camera trực tiếp');
+                return;
+            }
+
+            try {
+                faceCameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user',
+                    },
+                    audio: false,
+                });
+
+                const video = document.getElementById('faceCameraVideo');
+                video.srcObject = faceCameraStream;
+                video.style.display = '';
+                document.getElementById('btnStartFaceCamera').style.display = 'none';
+                document.getElementById('btnCaptureFace').style.display = '';
+                document.getElementById('btnStopFaceCamera').style.display = '';
+            } catch (e) {
+                toast.error('Camera', 'Không thể bật camera. Kiểm tra quyền truy cập hoặc camera đang được dùng ở tab khác.');
+                console.error('Face camera error:', e);
+            }
+        }
+
+        function stopFaceCamera() {
+            if (faceCameraStream) {
+                faceCameraStream.getTracks().forEach(track => track.stop());
+                faceCameraStream = null;
+            }
+
+            const video = document.getElementById('faceCameraVideo');
+            if (video) {
+                video.pause();
+                video.srcObject = null;
+                video.style.display = 'none';
+            }
+
+            document.getElementById('btnStartFaceCamera').style.display = '';
+            document.getElementById('btnCaptureFace').style.display = 'none';
+            document.getElementById('btnStopFaceCamera').style.display = 'none';
+        }
+
+        function captureFacePhoto() {
+            const video = document.getElementById('faceCameraVideo');
+            if (!video || !video.videoWidth || !video.videoHeight) {
+                toast.warning('Camera', 'Camera chưa sẵn sàng để chụp');
+                return;
+            }
+
+            const canvas = document.getElementById('faceCaptureCanvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    toast.error('Camera', 'Không thể chụp ảnh từ camera');
+                    return;
+                }
+
+                const file = new File(
+                    [blob],
+                    `camera_capture_${Date.now()}.jpg`,
+                    { type: 'image/jpeg' }
+                );
+                capturedFaceFiles.push(file);
+                renderFacePreview();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function renderFacePreview() {
+            const preview = document.getElementById('facePreview');
+            const selectedFiles = [...document.getElementById('faceFiles').files];
+            const files = [...selectedFiles, ...capturedFaceFiles];
+
+            preview.innerHTML = '';
+            files.forEach((file, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.style.cssText = 'position:relative;width:80px;height:80px;';
+
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:var(--radius-lg);border:2px solid var(--color-border);';
+                wrapper.appendChild(img);
+
+                if (index >= selectedFiles.length) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.textContent = '×';
+                    removeBtn.className = 'btn btn-danger btn-sm';
+                    removeBtn.style.cssText = 'position:absolute;top:-8px;right:-8px;width:24px;height:24px;padding:0;border-radius:50%;';
+                    removeBtn.onclick = () => {
+                        capturedFaceFiles.splice(index - selectedFiles.length, 1);
+                        renderFacePreview();
+                    };
+                    wrapper.appendChild(removeBtn);
+                }
+
+                preview.appendChild(wrapper);
+            });
+        }
+
         async function uploadFaces() {
-            const files = document.getElementById('faceFiles').files;
-            if (!files || files.length === 0) {
+            const selectedFiles = [...document.getElementById('faceFiles').files];
+            const files = [...selectedFiles, ...capturedFaceFiles];
+            if (files.length === 0) {
                 toast.warning('Chưa chọn ảnh', 'Vui lòng chọn ít nhất 1 ảnh');
+                return;
+            }
+
+            if (files.length > 5) {
+                toast.warning('Quá nhiều ảnh', 'Vui lòng chọn/chụp tối đa 5 ảnh mỗi lần đăng ký');
                 return;
             }
 
@@ -400,7 +541,7 @@
                 if (result.errors && result.errors.length > 0) {
                     result.errors.forEach(err => toast.warning('Cảnh báo', err));
                 }
-                closeModal('faceModal');
+                closeFaceModal();
                 loadEmployees(currentPage);
             } catch (e) {
                 toast.error('Lỗi', e.message);
@@ -425,18 +566,7 @@
         // File preview
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('faceFiles')?.addEventListener('change', function() {
-                const preview = document.getElementById('facePreview');
-                preview.innerHTML = '';
-                [...this.files].forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:var(--radius-lg);border:2px solid var(--color-border);';
-                        preview.appendChild(img);
-                    };
-                    reader.readAsDataURL(file);
-                });
+                renderFacePreview();
             });
         });
 
