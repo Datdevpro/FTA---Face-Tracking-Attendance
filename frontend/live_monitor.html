@@ -65,14 +65,14 @@
                         </div>
                     </div>
 
-                    <!-- Attendance Log -->
-                    <div>
-                        <div class="card" style="height: 100%;">
+                    <!-- Attendance Log + Welcome Screen -->
+                    <div class="live-side-column">
+                        <div class="card attendance-card-compact mb-6">
                             <div class="card-header">
                                 <h2 class="card-title">Chấm công hôm nay</h2>
                                 <span class="badge badge-success" id="attendanceCount">0</span>
                             </div>
-                            <div class="card-body" id="attendanceLog" style="max-height: 600px; overflow-y: auto;">
+                            <div class="card-body" id="attendanceLog">
                                 <div class="empty-state">
                                     <div class="empty-state-icon">📋</div>
                                     <div class="empty-state-title">Đang chờ...</div>
@@ -80,9 +80,37 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="card welcome-card">
+                            <div class="card-header">
+                                <h2 class="card-title">Welcome screen</h2>
+                                <span class="badge badge-info" id="welcomeStatus">Ready</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="welcome-screen" id="welcomeScreen">
+                                    <div class="welcome-media">
+                                        <div class="welcome-capture-placeholder">👋</div>
+                                    </div>
+                                    <div class="welcome-info-panel">
+                                        <div class="welcome-row">
+                                            <span class="welcome-label">Tên:</span>
+                                            <span class="welcome-value">-</span>
+                                        </div>
+                                        <div class="welcome-row">
+                                            <span class="welcome-label">Mã nhân viên:</span>
+                                            <span class="welcome-value">-</span>
+                                        </div>
+                                        <div class="welcome-row">
+                                            <span class="welcome-label">Câu chào:</span>
+                                            <span class="welcome-value">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </div> 
         </main>
     </div>
 
@@ -92,6 +120,9 @@
         let ws = null;
         let isStreaming = false;
         let streamToken = 0;
+        let lastWelcomeKey = null;
+        let welcomeClearTimer = null;
+        let vietnameseVoice = null;
         const cameraPlaceholder =
             "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23111827'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%2364748b' font-size='16' font-family='Inter'%3ECamera ch%C6%B0a k%E1%BA%BFt n%E1%BB%91i%3C/text%3E%3C/svg%3E";
         const attendanceEvents = [];
@@ -150,6 +181,10 @@
                             );
                         });
                         updateAttendanceLog();
+                    }
+
+                    if (data.welcome_events && data.welcome_events.length > 0) {
+                        showWelcome(data.welcome_events[0]);
                     }
                 } else if (data.type === 'status') {
                     document.getElementById('cameraStatusDot').className =
@@ -242,6 +277,168 @@
             `).join('');
         }
 
+        function showWelcome(event) {
+            const key = `${event.employee_id || event.employee_code}-${event.time}`;
+            if (key === lastWelcomeKey) return;
+            lastWelcomeKey = key;
+
+            const name = event.employee_name || 'bạn';
+            const message = event.message || `Xin chào ${name}. Chúc bạn một ngày tốt lành.`;
+            const imageHtml = event.image
+                ? `<img class="welcome-capture" src="data:image/jpeg;base64,${event.image}" alt="Welcome capture">`
+                : `<div class="welcome-capture-placeholder">${getInitials(name)}</div>`;
+            const timeText = new Date(event.time).toLocaleTimeString('vi-VN');
+
+            document.getElementById('welcomeStatus').textContent = 'Live';
+            document.getElementById('welcomeScreen').innerHTML = `
+                <div class="welcome-media">
+                    ${imageHtml}
+                </div>
+                <div class="welcome-info-panel">
+                    <div class="welcome-row">
+                        <span class="welcome-label">Tên:</span>
+                        <span class="welcome-value">${escapeHtml(name)}</span>
+                    </div>
+                    <div class="welcome-row">
+                        <span class="welcome-label">Mã nhân viên:</span>
+                        <span class="welcome-value">${escapeHtml(event.employee_code || '-')}</span>
+                    </div>
+                    <div class="welcome-row">
+                        <span class="welcome-label">Câu chào:</span>
+                        <span class="welcome-value">${escapeHtml(message)}</span>
+                    </div>
+                    <div class="welcome-meta">${escapeHtml(timeText)}</div>
+                </div>
+            `;
+
+            speakWelcome(message);
+
+            if (welcomeClearTimer) {
+                clearTimeout(welcomeClearTimer);
+            }
+            welcomeClearTimer = setTimeout(() => {
+                if (key === lastWelcomeKey) {
+                    clearWelcome();
+                }
+            }, 5000);
+        }
+
+        function clearWelcome() {
+            document.getElementById('welcomeStatus').textContent = 'Ready';
+            document.getElementById('welcomeScreen').innerHTML = `
+                <div class="welcome-media">
+                    <div class="welcome-capture-placeholder">👋</div>
+                </div>
+                <div class="welcome-info-panel">
+                    <div class="welcome-row">
+                        <span class="welcome-label">Tên:</span>
+                        <span class="welcome-value">-</span>
+                    </div>
+                    <div class="welcome-row">
+                        <span class="welcome-label">Mã nhân viên:</span>
+                        <span class="welcome-value">-</span>
+                    </div>
+                    <div class="welcome-row">
+                        <span class="welcome-label">Câu chào:</span>
+                        <span class="welcome-value">-</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function speakWelcome(message) {
+            const normalized = normalizeVietnameseSpeechText(message);
+            try {
+                await speakWithServerTTS(normalized);
+                return;
+            } catch (error) {
+                console.warn('Server TTS failed, falling back to browser voice:', error);
+            }
+
+            speakWithBrowserTTS(normalized);
+        }
+
+        async function speakWithServerTTS(message) {
+            const response = await fetch('/api/tts/welcome', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(api.token ? { Authorization: `Bearer ${api.token}` } : {}),
+                },
+                body: JSON.stringify({
+                    text: message,
+                    voice: 'vi-VN-HoaiMyNeural',
+                    rate: '-8%',
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || `TTS HTTP ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.onended = () => URL.revokeObjectURL(url);
+            audio.onerror = () => URL.revokeObjectURL(url);
+            await audio.play();
+        }
+
+        function speakWithBrowserTTS(message) {
+            if (!('speechSynthesis' in window)) return;
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(message);
+            const voice = getVietnameseVoice();
+            if (voice) {
+                utterance.voice = voice;
+            }
+            utterance.lang = 'vi-VN';
+            utterance.rate = 0.88;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function getVietnameseVoice() {
+            if (vietnameseVoice) return vietnameseVoice;
+            if (!('speechSynthesis' in window)) return null;
+
+            const voices = window.speechSynthesis.getVoices();
+            vietnameseVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith('vi'))
+                || voices.find(v => /vietnam|viet|hoai|hoài|an/i.test(v.name || ''))
+                || null;
+            return vietnameseVoice;
+        }
+
+        function initVietnameseVoice() {
+            getVietnameseVoice();
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    vietnameseVoice = null;
+                    getVietnameseVoice();
+                };
+            }
+        }
+
+        function normalizeVietnameseSpeechText(message) {
+            return String(message || '')
+                .replace(/\s+/g, ' ')
+                .replace(/,\s*/g, '. ')
+                .trim();
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            }[ch]));
+        }
+
         function updateAttendanceLog() {
             const container = document.getElementById('attendanceLog');
             document.getElementById('attendanceCount').textContent = attendanceEvents.length;
@@ -288,6 +485,7 @@
         }
 
         loadTodayAttendance();
+        initVietnameseVoice();
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {

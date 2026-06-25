@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # --- Database ---
+    # SQLite is the temporary local default.
+    # PostgreSQL option for later:
+    # DATABASE_URL: str = "postgresql://fta_user:fta_password@localhost:5432/fta_db"
     DATABASE_URL: str = "sqlite:///./data/fta.db"
     DB_ECHO: bool = False
 

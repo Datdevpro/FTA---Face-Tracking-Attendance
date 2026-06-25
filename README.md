@@ -49,6 +49,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **API Docs**: http://localhost:8000/docs
 - **Login mặc định**: `admin` / `admin123`
 
+PostgreSQL setup for later production-style testing: [docs/postgresql-setup.md](docs/postgresql-setup.md)
+
 ## 📁 Cấu trúc dự án
 
 ```
@@ -76,7 +78,7 @@ FTA/
 | Face Detection | InsightFace (SCRFD) |
 | Face Recognition | ArcFace (buffalo_l) |
 | Vector Search | FAISS (IndexFlatIP) |
-| Database | SQLite / PostgreSQL |
+| Database | SQLite for local development, PostgreSQL ready for production-style setup |
 | Frontend | HTML5 + CSS3 + Vanilla JS |
 | Real-time | WebSocket |
 

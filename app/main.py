@@ -196,6 +196,7 @@ from app.api.employees import router as employees_router
 from app.api.recognition import router as recognition_router
 from app.api.attendance import router as attendance_router
 from app.api.reports import router as reports_router
+from app.api.tts import router as tts_router
 
 app.include_router(auth_router)
 app.include_router(departments_router)
@@ -203,6 +204,7 @@ app.include_router(employees_router)
 app.include_router(recognition_router)
 app.include_router(attendance_router)
 app.include_router(reports_router)
+app.include_router(tts_router)
 
 
 # ---------------------------------------------------------------------------
