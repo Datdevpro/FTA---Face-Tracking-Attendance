@@ -16,6 +16,7 @@ class AttendanceResponse(BaseModel):
     attendance_date: date
     check_in_time: Optional[datetime]
     check_out_time: Optional[datetime]
+    check_out_pending: bool = False
     check_in_confidence: Optional[float]
     check_out_confidence: Optional[float]
     status: str

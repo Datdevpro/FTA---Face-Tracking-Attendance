@@ -5,7 +5,7 @@ Attendance management API endpoints.
 from datetime import date, datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -21,12 +21,28 @@ from app.schemas.attendance import (
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
 
-def _record_to_response(record: AttendanceRecord, db: Session) -> AttendanceResponse:
+def _record_to_response(
+    record: AttendanceRecord,
+    db: Session,
+    attendance_service=None,
+) -> AttendanceResponse:
     """Convert AttendanceRecord model to response schema."""
     employee = db.query(Employee).filter(Employee.id == record.employee_id).first()
     dept_name = None
     if employee and employee.department:
         dept_name = employee.department.name
+
+    check_out_time = record.check_out_time
+    check_out_confidence = record.check_out_confidence
+    check_out_pending = False
+    if attendance_service and check_out_time is None:
+        pending = attendance_service.get_pending_checkout(
+            record.employee_id, record.attendance_date
+        )
+        if pending:
+            check_out_time = datetime.fromisoformat(pending["recognized_at"])
+            check_out_confidence = pending["confidence"]
+            check_out_pending = True
 
     return AttendanceResponse(
         id=record.id,
@@ -36,9 +52,10 @@ def _record_to_response(record: AttendanceRecord, db: Session) -> AttendanceResp
         department_name=dept_name,
         attendance_date=record.attendance_date,
         check_in_time=record.check_in_time,
-        check_out_time=record.check_out_time,
+        check_out_time=check_out_time,
+        check_out_pending=check_out_pending,
         check_in_confidence=record.check_in_confidence,
-        check_out_confidence=record.check_out_confidence,
+        check_out_confidence=check_out_confidence,
         status=record.status,
         source=record.source,
         note=record.note,
@@ -48,6 +65,7 @@ def _record_to_response(record: AttendanceRecord, db: Session) -> AttendanceResp
 
 @router.get("", response_model=AttendanceListResponse)
 def list_attendance(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     attendance_date: Optional[date] = None,
@@ -78,7 +96,8 @@ def list_attendance(
         .all()
     )
 
-    items = [_record_to_response(r, db) for r in records]
+    attendance_service = request.app.state.attendance_service
+    items = [_record_to_response(r, db, attendance_service) for r in records]
 
     return AttendanceListResponse(
         items=items,
@@ -90,6 +109,7 @@ def list_attendance(
 
 @router.get("/today", response_model=List[AttendanceResponse])
 def get_today_attendance(
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -101,11 +121,13 @@ def get_today_attendance(
         .order_by(AttendanceRecord.check_in_time.desc())
         .all()
     )
-    return [_record_to_response(r, db) for r in records]
+    attendance_service = request.app.state.attendance_service
+    return [_record_to_response(r, db, attendance_service) for r in records]
 
 
 @router.post("/manual", response_model=AttendanceResponse, status_code=status.HTTP_201_CREATED)
 def create_manual_attendance(
+    request: Request,
     data: AttendanceManualCreate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -141,7 +163,13 @@ def create_manual_attendance(
             existing.note = data.note
         db.commit()
         db.refresh(existing)
-        return _record_to_response(existing, db)
+        if data.check_out_time:
+            request.app.state.attendance_service.clear_pending_checkout(
+                data.employee_id, data.attendance_date
+            )
+        return _record_to_response(
+            existing, db, request.app.state.attendance_service
+        )
 
     # Create new record
     record = AttendanceRecord(
@@ -157,7 +185,11 @@ def create_manual_attendance(
     db.commit()
     db.refresh(record)
 
-    return _record_to_response(record, db)
+    if data.check_out_time:
+        request.app.state.attendance_service.clear_pending_checkout(
+            data.employee_id, data.attendance_date
+        )
+    return _record_to_response(record, db, request.app.state.attendance_service)
 
 
 @router.get("/summary")
