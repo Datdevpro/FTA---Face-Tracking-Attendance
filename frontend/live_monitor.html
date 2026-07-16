@@ -174,9 +174,17 @@
                     // Process attendance events
                     if (data.attendance_events && data.attendance_events.length > 0) {
                         data.attendance_events.forEach(event => {
+                            if (event.action === 'CHECK_OUT_PENDING') {
+                                const existingIndex = attendanceEvents.findIndex(item =>
+                                    item.action === 'CHECK_OUT_PENDING' &&
+                                    item.employee_id === event.employee_id
+                                );
+                                if (existingIndex >= 0) attendanceEvents.splice(existingIndex, 1);
+                            }
                             attendanceEvents.unshift(event);
-                            toast.success(
-                                event.action === 'CHECK_IN' ? 'Check-in' : 'Check-out',
+                            const isPendingCheckout = event.action === 'CHECK_OUT_PENDING';
+                            toast[isPendingCheckout ? 'info' : 'success'](
+                                event.action === 'CHECK_IN' ? 'Check-in' : 'Check-out tạm tính',
                                 `${event.employee_name} (${event.employee_code})`
                             );
                         });
@@ -452,7 +460,11 @@
                         <div class="activity-name">${e.employee_name}</div>
                         <div class="activity-detail">
                             ${e.employee_code} ·
-                            ${e.action === 'CHECK_IN' ? '🟢 Check-in' : '🔴 Check-out'}
+                            ${e.action === 'CHECK_IN'
+                                ? '🟢 Check-in'
+                                : e.action === 'CHECK_OUT_PENDING'
+                                    ? '🔵 Check-out tạm tính'
+                                    : '🔴 Check-out'}
                         </div>
                     </div>
                     <div>
@@ -470,12 +482,23 @@
                 if (today && today.length > 0) {
                     today.forEach(r => {
                         attendanceEvents.push({
+                            employee_id: r.employee_id,
                             employee_name: r.employee_name,
                             employee_code: r.employee_code,
                             action: 'CHECK_IN',
                             time: r.check_in_time,
                             status: r.status,
                         });
+                        if (r.check_out_time) {
+                            attendanceEvents.push({
+                                employee_id: r.employee_id,
+                                employee_name: r.employee_name,
+                                employee_code: r.employee_code,
+                                action: r.check_out_pending ? 'CHECK_OUT_PENDING' : 'CHECK_OUT',
+                                time: r.check_out_time,
+                                status: r.status,
+                            });
+                        }
                     });
                     updateAttendanceLog();
                 }

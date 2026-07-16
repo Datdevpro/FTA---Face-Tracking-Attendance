@@ -165,7 +165,10 @@
                                     <td class="text-muted">${r.department_name || '-'}</td>
                                     <td>${formatDate(r.attendance_date)}</td>
                                     <td>${r.check_in_time ? formatTime(r.check_in_time) : '-'}</td>
-                                    <td>${r.check_out_time ? formatTime(r.check_out_time) : '-'}</td>
+                                    <td>
+                                        ${r.check_out_time ? formatTime(r.check_out_time) : '-'}
+                                        ${r.check_out_pending ? '<span class="badge badge-info">Tạm Check-Out</span>' : ''}
+                                    </td>
                                     <td>${statusBadge(r.status)}</td>
                                     <td class="text-xs text-muted">
                                         ${r.source === 'CAMERA_AUTO' ? '📹 Camera' : '✏️ Thủ công'}
