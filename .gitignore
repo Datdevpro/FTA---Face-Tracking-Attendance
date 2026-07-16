@@ -9,9 +9,14 @@ __pycache__/
 # Data
 data/face_images/
 data/faiss_index/
-data/models/
+data/models/*
+!data/models/anti_spoofing/
+data/models/anti_spoofing/*
+!data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx
 data/snapshots/
 data/fta.db
+data/pending_checkouts.json
+data/pending_checkouts.json.tmp
 
 # IDE
 .vscode/

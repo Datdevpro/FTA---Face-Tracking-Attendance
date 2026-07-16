@@ -6,8 +6,10 @@ This module initializes all services, registers routes,
 and configures the application lifecycle.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
@@ -46,8 +48,15 @@ face_service = FaceRecognitionService(
     onnx_provider=settings.FACE_ONNX_PROVIDER,
 )
 face_index = FaceIndexManager(index_dir=settings.FAISS_INDEX_DIR)
-anti_spoofing = AntiSpoofingService(threshold=settings.ANTI_SPOOFING_THRESHOLD)
-attendance_service = AttendanceService()
+anti_spoofing = AntiSpoofingService(
+    model_path=settings.ANTI_SPOOFING_MODEL_PATH,
+    threshold=settings.ANTI_SPOOFING_THRESHOLD,
+    onnx_provider=settings.ANTI_SPOOFING_PROVIDER,
+    crop_scale=settings.ANTI_SPOOFING_CROP_SCALE,
+)
+attendance_service = AttendanceService(
+    pending_state_path=settings.ATTENDANCE_PENDING_STATE_PATH
+)
 camera_service = CameraService(
     source=settings.camera_source_parsed,
     width=settings.CAMERA_WIDTH,
@@ -77,6 +86,24 @@ def _rebuild_faiss_index():
         face_index.build_index(embeddings_data)
     finally:
         db.close()
+
+
+def _finalize_completed_day_checkouts():
+    db = SessionLocal()
+    try:
+        attendance_service.finalize_pending_checkouts(db)
+    finally:
+        db.close()
+
+
+async def _attendance_rollover_worker():
+    """Finalize yesterday's temporary checkouts shortly after midnight."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            _finalize_completed_day_checkouts()
+        except Exception:
+            logger.exception("Attendance rollover worker failed")
 
 
 # ---------------------------------------------------------------------------
@@ -109,22 +136,40 @@ async def lifespan(app: FastAPI):
             f"Install insightface and download models to enable."
         )
 
+    # Initialize anti-spoofing after face recognition has prepared CUDA DLLs.
+    if settings.ANTI_SPOOFING_ENABLED:
+        try:
+            anti_spoofing.initialize()
+        except Exception as e:
+            logger.exception(f"Anti-spoofing model not loaded: {e}")
+
     # Initialize and rebuild FAISS index
     try:
         _rebuild_faiss_index()
     except Exception as e:
         logger.warning(f"FAISS index initialization failed: {e}")
 
+    try:
+        _finalize_completed_day_checkouts()
+    except Exception:
+        logger.exception("Unable to finalize pending checkouts during startup")
+
+    rollover_task = asyncio.create_task(_attendance_rollover_worker())
+
     logger.info("Application startup complete")
     logger.info(f"Dashboard: http://localhost:{settings.PORT}")
     logger.info(f"API Docs:  http://localhost:{settings.PORT}/docs")
 
-    yield
-
-    # --- Shutdown ---
-    logger.info("Shutting down...")
-    camera_service.stop()
-    logger.info("Application shutdown complete")
+    try:
+        yield
+    finally:
+        # --- Shutdown ---
+        rollover_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await rollover_task
+        logger.info("Shutting down...")
+        camera_service.stop()
+        logger.info("Application shutdown complete")
 
 
 def _ensure_default_admin():
@@ -157,6 +202,7 @@ app = FastAPI(
     description="Face Recognition Time Attendance System for Small Business",
     lifespan=lifespan,
 )
+app.state.attendance_service = attendance_service
 
 # CORS
 app.add_middleware(
@@ -248,6 +294,11 @@ def health_check():
         "face_provider_active": face_service.active_provider,
         "face_providers_active": face_service.active_providers,
         "face_using_gpu": face_service.is_using_gpu,
+        "anti_spoofing_enabled": settings.ANTI_SPOOFING_ENABLED,
+        "anti_spoofing_model_loaded": anti_spoofing.is_initialized,
+        "anti_spoofing_provider_active": anti_spoofing.active_provider,
+        "anti_spoofing_using_gpu": anti_spoofing.is_using_gpu,
+        "anti_spoofing_last_error": anti_spoofing.last_error,
         "faiss_index_faces": face_index.total_faces,
         "camera_connected": camera_service.is_connected,
     }

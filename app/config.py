@@ -49,14 +49,20 @@ class Settings(BaseSettings):
 
     # --- Anti-Spoofing ---
     ANTI_SPOOFING_ENABLED: bool = True
+    ANTI_SPOOFING_MODEL_PATH: str = (
+        "./data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx"
+    )
+    ANTI_SPOOFING_PROVIDER: str = "cuda"
     ANTI_SPOOFING_THRESHOLD: float = 0.5
+    ANTI_SPOOFING_CROP_SCALE: float = 1.5
     ANTI_SPOOFING_INTERVAL_FRAMES: int = 5
 
     # --- Attendance ---
-    ATTENDANCE_COOLDOWN_SECONDS: int = 1800
     WORK_START_TIME: str = "08:30"
     WORK_END_TIME: str = "17:30"
     LATE_THRESHOLD_MINUTES: int = 15
+    CHECK_OUT_WINDOW_MINUTES: int = 15
+    ATTENDANCE_PENDING_STATE_PATH: str = "./data/pending_checkouts.json"
 
     # --- File Storage ---
     FACE_IMAGES_DIR: str = "./data/face_images"
