@@ -202,12 +202,9 @@ a:hover {
 .sidebar-logo-icon {
     width: 40px;
     height: 40px;
-    background: var(--gradient-primary);
     border-radius: var(--radius-lg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
+    display: block;
+    object-fit: cover;
     box-shadow: var(--shadow-glow);
 }
 

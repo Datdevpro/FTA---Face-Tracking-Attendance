@@ -180,7 +180,7 @@ function getSidebarHTML() {
     return `
     <div class="sidebar-header">
         <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">👤</div>
+            <img class="sidebar-logo-icon" src="/static/FTA_icon.png" alt="FTA">
             <span class="sidebar-logo-text">FTA</span>
         </div>
     </div>

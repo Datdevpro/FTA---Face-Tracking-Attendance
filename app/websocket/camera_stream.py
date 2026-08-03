@@ -327,7 +327,6 @@ def _draw_overlay(frame: np.ndarray, faces_data: list[dict]) -> np.ndarray:
         x1, y1, x2, y2 = [int(v) for v in face.get("bbox", [0, 0, 0, 0])]
         employee_id = face.get("employee_id")
         name = face.get("name") or "Unknown"
-        similarity = float(face.get("similarity") or 0.0)
         is_live = face.get("is_live", True)
 
         if not is_live:
@@ -339,7 +338,7 @@ def _draw_overlay(frame: np.ndarray, faces_data: list[dict]) -> np.ndarray:
 
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
 
-        label = f"{name} ({similarity:.0%})" if employee_id and is_live else name
+        label = name
         label_size, _ = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
         )

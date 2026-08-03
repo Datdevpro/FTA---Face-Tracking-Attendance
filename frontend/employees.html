@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="FTA - Quản lý nhân viên">
     <title>Nhân viên | FTA</title>
+    <link rel="icon" type="image/png" href="/static/FTA_icon.png">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -203,12 +204,16 @@
             const deptId = document.getElementById('deptFilter').value;
 
             try {
-                const params = { page, page_size: 15 };
+                const params = { page, page_size: 15, is_active: true };
                 if (search) params.search = search;
                 if (deptId) params.department_id = deptId;
 
                 const data = await api.getEmployees(params);
                 if (!data) return;
+
+                if (data.items.length === 0 && page > 1) {
+                    return loadEmployees(page - 1);
+                }
 
                 const tableEl = document.getElementById('employeeTable');
 
@@ -362,7 +367,7 @@
             try {
                 await api.deleteEmployee(id);
                 toast.success('Đã xóa', name);
-                loadEmployees(currentPage);
+                await loadEmployees(currentPage);
             } catch (e) {
                 toast.error('Lỗi', e.message);
             }
