@@ -68,7 +68,7 @@ khả năng chống giả mạo, quản lý nhân viên, theo dõi chấm công 
 
 ```text
 https://github.com/Datdevpro/FTA---Face-Tracking-Attendance.git
-setup-fta.bat
+.\setup-fta.bat
 ```
 
 Script sẽ tự động tạo `venv`, tạo `.env`, sinh JWT secret, cài dependency, khởi
@@ -78,7 +78,7 @@ tạo SQLite và chuẩn bị model nhận diện. Cấu hình ban đầu sử d
 Khi setup hoàn tất, run file:
 
 ```text
-start-fta.bat
+.\start-fta.bat
 ```
 
 Sau đó truy cập [http://localhost:8000](http://localhost:8000).
