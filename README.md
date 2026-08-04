@@ -1,5 +1,11 @@
 # FTA - Face Time Attendance System
 
+## Cai dat tu dong tren Windows
+
+Sau khi clone project, double-click `setup-fta.bat`. Script se tu dong tao
+virtual environment, tao `.env`, cai dependency, khoi tao SQLite va tai model
+nhan dien khuon mat. Khi setup hoan tat, double-click `start-fta.bat` de chay FTA.
+
 Hệ thống chấm công nhân sự bằng nhận diện khuôn mặt (Face Recognition) dành cho doanh nghiệp nhỏ (~50 nhân viên).
 
 ## 🚀 Tính năng
