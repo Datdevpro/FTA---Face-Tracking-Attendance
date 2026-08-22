@@ -58,13 +58,15 @@ khả năng chống giả mạo, quản lý nhân viên, theo dõi chấm công 
 
 ### Prerequisites
 
-- Windows 10 hoặc Windows 11 64-bit.
-- Python 3.11 64-bit.
+- Windows 10/11 64-bit hoặc Ubuntu 22.04/24.04 64-bit.
+- Python 3.11 64-bit trên Windows; Python 3.10-3.12 trên Ubuntu.
 - RAM tối thiểu 4 GB, khuyến nghị 8 GB trở lên.
 - Webcam USB hoặc IP Camera sử dụng RTSP.
 - Kết nối Internet trong lần cài đầu để tải dependency và model `buffalo_l`.
 
 ### One line setup
+
+#### Windows
 
 ```text
 https://github.com/Datdevpro/FTA---Face-Tracking-Attendance.git
@@ -82,6 +84,24 @@ Khi setup hoàn tất, run file:
 ```
 
 Sau đó truy cập [http://localhost:8000](http://localhost:8000).
+
+#### Ubuntu 22.04 / 24.04
+
+```bash
+git clone https://github.com/Datdevpro/FTA---Face-Tracking-Attendance.git FTA
+cd FTA
+chmod +x setup-fta-ubuntu.sh
+./setup-fta-ubuntu.sh
+```
+
+Sau khi setup hoàn tất, chạy backend bằng:
+
+```bash
+./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Script Ubuntu mặc định sử dụng CPU. Wheel InsightFace trong `model_wheel` chỉ
+dành cho Windows; trên Ubuntu, InsightFace được build tự động từ PyPI.
 
 ### By-hand Installation
 
