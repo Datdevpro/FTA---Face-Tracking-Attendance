@@ -29,6 +29,19 @@ from app.services.anti_spoofing import AntiSpoofingService
 from app.services.attendance_service import AttendanceService
 from app.services.camera_service import CameraService
 
+
+import asyncio
+import logging
+import warnings                          # ← added
+from contextlib import asynccontextmanager
+from contextlib import suppress
+from pathlib import Path
+# Suppress FutureWarnings from insightface's internal utils (third-party, cannot modify)
+warnings.filterwarnings("ignore", message=r".*rcond.*parameter will change.*",
+                        category=FutureWarning, module=r"insightface\.utils\.transform")
+warnings.filterwarnings("ignore", message=r".*estimate.*is deprecated.*",
+                        category=FutureWarning, module=r"insightface\.utils\.face_align")
+
 # ---------------------------------------------------------------------------
 # Logging setup
 # ---------------------------------------------------------------------------
