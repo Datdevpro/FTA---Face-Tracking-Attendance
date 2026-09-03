@@ -1,0 +1,26 @@
+version: "2.4"
+
+services:
+  fta:
+    container_name: fta-jetson
+    build:
+      context: ..
+      dockerfile: docker-ubuntu/Dockerfile
+    image: fta-jetson:latest
+    platform: linux/arm64
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    env_file:
+      - .env
+    devices:
+      - "${FTA_CAMERA_DEVICE:-/dev/video0}:/dev/video0"
+    volumes:
+      - ../data:/app/data
+    shm_size: "512m"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
