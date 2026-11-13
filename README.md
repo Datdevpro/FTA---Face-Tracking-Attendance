@@ -103,6 +103,20 @@ Sau khi setup hoàn tất, chạy backend bằng:
 Script Ubuntu mặc định sử dụng CPU. Wheel InsightFace trong `model_wheel` chỉ
 dành cho Windows; trên Ubuntu, InsightFace được build tự động từ PyPI.
 
+#### Jetson Nano bằng Docker
+
+Trên Jetson Nano chạy JetPack 4.6.x:
+
+```bash
+git clone https://github.com/Datdevpro/FTA---Face-Tracking-Attendance.git FTA
+cd FTA
+chmod +x docker-ubuntu/deploy.sh
+./docker-ubuntu/deploy.sh
+```
+
+Hướng dẫn camera, lưu trữ, vận hành và giới hạn GPU nằm tại
+[`docker-ubuntu/README.md`](docker-ubuntu/README.md).
+
 ### By-hand Installation
 
 ```powershell

@@ -2,6 +2,10 @@
 .env
 FTA_venv/
 venv/
+.venv-jetson/
+.jetson-python/
+.jetson-build/
+.env.before-jetson-*
 __pycache__/
 *.pyc
 *.pyo
