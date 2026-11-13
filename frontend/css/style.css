@@ -639,6 +639,60 @@ a:hover {
     padding-right: 40px;
 }
 
+/* --- Camera Feed controls --- */
+.camera-feed-header {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+.camera-feed-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    /* Previous: flex-wrap: wrap; allowed the button to move below the select. */
+    flex-wrap: nowrap;
+    flex: 0 1 270px;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
+    gap: var(--space-2);
+}
+
+.camera-source-select {
+    /* Previous: width: auto; */
+    flex: 1 1 160px;
+    width: 160px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 32px;
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+    font-size: var(--font-size-xs);
+    color-scheme: dark;
+}
+
+.camera-feed-controls > .btn {
+    flex: 0 0 auto;
+    min-height: 32px;
+    white-space: nowrap;
+}
+
+.camera-source-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Previous narrow-screen header rule; camera-feed-header now wraps only
+   the title/control groups, keeping the dropdown and button together.
+@media (max-width: 480px) {
+    .card-header:has(.camera-feed-controls) {
+        flex-wrap: wrap;
+        gap: var(--space-3);
+    }
+}
+*/
+
 /* --- Table --- */
 .table-container {
     overflow-x: auto;

@@ -6,7 +6,7 @@
     <meta name="description" content="FTA - Camera trực tiếp nhận diện khuôn mặt">
     <title>Camera trực tiếp | FTA</title>
     <link rel="icon" type="image/png" href="/static/icon2.png?v=2">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=camera-controls-2">
 </head>
 <body>
     <div class="app-layout">
@@ -27,9 +27,16 @@
                     <!-- Camera Feed -->
                     <div>
                         <div class="card mb-6">
-                            <div class="card-header">
+                            <div class="card-header camera-feed-header">
                                 <h2 class="card-title">Camera Feed</h2>
-                                <div class="flex gap-2">
+                                <!-- Previous controls: <div class="flex gap-2"> -->
+                                <div class="camera-feed-controls">
+                                    <select class="form-select camera-source-select" id="cameraSource"
+                                            aria-label="Chọn nguồn camera">
+                                        <option value="webcam">Webcam</option>
+                                        <option value="imou_rotate">Cam IMOU xoay</option>
+                                        <option value="imou_fixed">Cam IMOU cứng</option>
+                                    </select>
                                     <button class="btn btn-success btn-sm" id="btnStartCamera" onclick="startStream()">
                                         ▶ Bắt đầu
                                     </button>
@@ -120,24 +127,38 @@
     <script>
         let ws = null;
         let isStreaming = false;
+        let isStopping = false;
         let streamToken = 0;
         let lastWelcomeKey = null;
         let welcomeClearTimer = null;
         let vietnameseVoice = null;
+        let browserMediaStream = null;
+        let browserVideo = null;
+        let browserCanvas = null;
+        let browserCaptureTimer = null;
+        let browserFramePending = false;
+        let browserFrameIntervalMs = 1000 / 15;
+        let browserFrameSentAt = 0;
         const cameraPlaceholder =
             "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23111827'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' fill='%2364748b' font-size='16' font-family='Inter'%3ECamera ch%C6%B0a k%E1%BA%BFt n%E1%BB%91i%3C/text%3E%3C/svg%3E";
         const attendanceEvents = [];
 
         function startStream() {
-            if (isStreaming) return;
+            if (isStreaming || isStopping || (ws && ws.readyState !== WebSocket.CLOSED)) return;
             const currentToken = ++streamToken;
+            const cameraSource = document.getElementById('cameraSource');
+            cameraSource.disabled = true;
+            document.getElementById('btnStartCamera').disabled = true;
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/camera-stream`;
+            // Previous URL (used only CAMERA_SOURCE from .env):
+            // const wsUrl = `${protocol}//${window.location.host}/ws/camera-stream`;
+            const wsUrl = `${protocol}//${window.location.host}/ws/camera-stream?camera=${encodeURIComponent(cameraSource.value)}`;
 
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
+                if (currentToken !== streamToken) return;
                 isStreaming = true;
                 document.getElementById('btnStartCamera').style.display = 'none';
                 document.getElementById('btnStopCamera').style.display = '';
@@ -150,7 +171,12 @@
                 if (currentToken !== streamToken || !isStreaming) return;
                 const data = JSON.parse(event.data);
 
-                if (data.type === 'frame') {
+                if (data.type === 'camera_mode') {
+                    if (data.mode === 'browser') {
+                        browserFrameIntervalMs = 1000 / Math.max(1, data.preview_fps || 15);
+                        startBrowserCapture(currentToken);
+                    }
+                } else if (data.type === 'frame') {
                     document.getElementById('cameraStatusDot').className = 'status-dot online';
                     document.getElementById('cameraStatusText').textContent = 'Live';
 
@@ -195,6 +221,8 @@
                     if (data.welcome_events && data.welcome_events.length > 0) {
                         showWelcome(data.welcome_events[0]);
                     }
+
+                    scheduleBrowserFrame(currentToken);
                 } else if (data.type === 'status') {
                     document.getElementById('cameraStatusDot').className =
                         data.status && data.status.starting ? 'status-dot starting' : 'status-dot offline';
@@ -207,33 +235,166 @@
 
             ws.onclose = () => {
                 if (currentToken === streamToken) {
+                    stopBrowserCapture();
+                    ws = null;
                     resetCameraView();
                 }
             };
 
             ws.onerror = (error) => {
+                if (currentToken !== streamToken) return;
                 toast.error('WebSocket Error', 'Mất kết nối với server');
                 console.error('WebSocket error:', error);
             };
         }
 
         async function stopStream() {
+            if (isStopping) return;
+            isStopping = true;
             streamToken++;
+            stopBrowserCapture();
             if (ws) {
                 ws.close();
                 ws = null;
             }
             isStreaming = false;
-            resetCameraView();
+            document.getElementById('btnStopCamera').disabled = true;
             try {
                 await api.stopCamera();
             } catch (e) {
                 console.error('Stop camera error:', e);
+            } finally {
+                isStopping = false;
+                resetCameraView();
+            }
+        }
+
+        async function startBrowserCapture(currentToken) {
+            if (browserMediaStream) return;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                handleBrowserCameraError(currentToken, new Error('Browser camera API is unavailable'));
+                return;
+            }
+
+            try {
+                const mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30 },
+                    },
+                    audio: false,
+                });
+
+                if (currentToken !== streamToken || !isStreaming) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+
+                browserMediaStream = mediaStream;
+                browserVideo = document.createElement('video');
+                browserVideo.srcObject = mediaStream;
+                browserVideo.muted = true;
+                browserVideo.playsInline = true;
+                await browserVideo.play();
+
+                browserCanvas = document.createElement('canvas');
+                browserCanvas.width = 640;
+                browserCanvas.height = 480;
+                scheduleBrowserFrame(currentToken, true);
+            } catch (error) {
+                handleBrowserCameraError(currentToken, error);
+            }
+        }
+
+        function scheduleBrowserFrame(currentToken, immediately = false) {
+            if (!browserMediaStream || browserFramePending || browserCaptureTimer) return;
+
+            const elapsed = performance.now() - browserFrameSentAt;
+            const delay = immediately ? 0 : Math.max(0, browserFrameIntervalMs - elapsed);
+            browserCaptureTimer = setTimeout(() => {
+                browserCaptureTimer = null;
+                sendBrowserFrame(currentToken);
+            }, delay);
+        }
+
+        function sendBrowserFrame(currentToken) {
+            if (
+                currentToken !== streamToken ||
+                !isStreaming ||
+                !ws ||
+                ws.readyState !== WebSocket.OPEN ||
+                !browserVideo ||
+                !browserCanvas ||
+                browserFramePending
+            ) return;
+
+            const sourceWidth = browserVideo.videoWidth || 640;
+            const sourceHeight = browserVideo.videoHeight || 480;
+            const targetWidth = Math.min(640, sourceWidth);
+            const targetHeight = Math.max(1, Math.round(targetWidth * sourceHeight / sourceWidth));
+            if (browserCanvas.width !== targetWidth || browserCanvas.height !== targetHeight) {
+                browserCanvas.width = targetWidth;
+                browserCanvas.height = targetHeight;
+            }
+
+            const context = browserCanvas.getContext('2d', { alpha: false });
+            context.drawImage(browserVideo, 0, 0, targetWidth, targetHeight);
+            browserFramePending = true;
+            browserCanvas.toBlob(blob => {
+                browserFramePending = false;
+                if (
+                    blob &&
+                    currentToken === streamToken &&
+                    isStreaming &&
+                    ws &&
+                    ws.readyState === WebSocket.OPEN
+                ) {
+                    browserFrameSentAt = performance.now();
+                    ws.send(blob);
+                } else if (currentToken === streamToken && isStreaming) {
+                    scheduleBrowserFrame(currentToken);
+                }
+            }, 'image/jpeg', 0.78);
+        }
+
+        function stopBrowserCapture() {
+            if (browserCaptureTimer) {
+                clearTimeout(browserCaptureTimer);
+                browserCaptureTimer = null;
+            }
+            if (browserMediaStream) {
+                browserMediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (browserVideo) {
+                browserVideo.pause();
+                browserVideo.srcObject = null;
+            }
+            browserMediaStream = null;
+            browserVideo = null;
+            browserCanvas = null;
+            browserFramePending = false;
+            browserFrameSentAt = 0;
+        }
+
+        function handleBrowserCameraError(currentToken, error) {
+            console.error('Browser camera error:', error);
+            toast.error('Camera Error', 'Không thể truy cập webcam. Hãy cấp quyền camera cho trình duyệt.');
+            if (currentToken === streamToken) {
+                streamToken++;
+                stopBrowserCapture();
+                if (ws) ws.close();
+                ws = null;
+                resetCameraView();
             }
         }
 
         function resetCameraView() {
             isStreaming = false;
+            document.getElementById('cameraSource').disabled = false;
+            document.getElementById('btnStartCamera').disabled = false;
+            document.getElementById('btnStopCamera').disabled = false;
             document.getElementById('btnStartCamera').style.display = '';
             document.getElementById('btnStopCamera').style.display = 'none';
             document.getElementById('cameraStatusDot').className = 'status-dot offline';
@@ -513,7 +674,10 @@
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            navigator.sendBeacon('/api/camera/stop');
+            // Previous cleanup: navigator.sendBeacon('/api/camera/stop');
+            // An idle tab must not stop the camera selected in another tab.
+            if (isStreaming && !isStopping) navigator.sendBeacon('/api/camera/stop');
+            stopBrowserCapture();
             if (ws) ws.close();
         });
     </script>
