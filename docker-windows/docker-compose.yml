@@ -1,0 +1,21 @@
+services:
+  fta:
+    container_name: fta-app-windows
+    build:
+      context: ..
+      dockerfile: docker-windows/Dockerfile
+    image: fta-app:windows
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ../data:/app/data
+    shm_size: "512m"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
