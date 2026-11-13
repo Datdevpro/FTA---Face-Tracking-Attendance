@@ -6,7 +6,7 @@
     <meta name="description" content="FTA - Camera trực tiếp nhận diện khuôn mặt">
     <title>Camera trực tiếp | FTA</title>
     <link rel="icon" type="image/png" href="/static/icon2.png?v=2">
-    <link rel="stylesheet" href="css/style.css?v=live-layout-3">
+    <link rel="stylesheet" href="css/style.css?v=live-layout-4">
 </head>
 <body class="live-monitor-page">
     <div class="app-layout">
@@ -210,11 +210,13 @@
                                 if (existingIndex >= 0) attendanceEvents.splice(existingIndex, 1);
                             }
                             attendanceEvents.unshift(event);
-                            const isPendingCheckout = event.action === 'CHECK_OUT_PENDING';
-                            toast[isPendingCheckout ? 'info' : 'success'](
-                                event.action === 'CHECK_IN' ? 'Check-in' : 'Check-out tạm tính',
-                                `${event.employee_name} (${event.employee_code})`
-                            );
+                            // Previous attendance popups, kept for quick restoration.
+                            // const isPendingCheckout = event.action === 'CHECK_OUT_PENDING';
+                            // toast[isPendingCheckout ? 'info' : 'success'](
+                            //     event.action === 'CHECK_IN' ? 'Check-in' : 'Check-out tạm tính',
+                            //     `${event.employee_name} (${event.employee_code})`
+                            // );
+                            // Lists and Welcome still update without a popup per event.
                         });
                         updateAttendanceLog();
                     }

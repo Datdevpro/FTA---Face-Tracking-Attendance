@@ -1478,6 +1478,12 @@ tr:hover td {
     min-height: 0;
 }
 
+.live-camera-card .camera-container {
+    /* Previous inherited background: #000. Keep uncropped frames with a
+       matching background when their aspect ratio differs from the panel. */
+    background: var(--color-bg-secondary);
+}
+
 .live-monitor-page .live-side-column {
     display: grid;
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
