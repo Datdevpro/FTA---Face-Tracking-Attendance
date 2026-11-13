@@ -75,6 +75,8 @@ camera_service = CameraService(
     width=settings.CAMERA_WIDTH,
     height=settings.CAMERA_HEIGHT,
     fps=settings.CAMERA_FPS,
+    rtsp_open_timeout_ms=settings.RTSP_OPEN_TIMEOUT_MS,
+    rtsp_read_timeout_ms=settings.RTSP_READ_TIMEOUT_MS,
 )
 
 

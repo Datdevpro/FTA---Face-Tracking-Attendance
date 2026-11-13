@@ -32,9 +32,13 @@ class Settings(BaseSettings):
 
     # --- Camera ---
     CAMERA_SOURCE: str = "0"
+    CAMERA_IMOU_ROTATE_RTSP: str = ""
+    CAMERA_IMOU_FIXED_RTSP: str = ""
     CAMERA_WIDTH: int = 640
     CAMERA_HEIGHT: int = 480
     CAMERA_FPS: int = 30
+    RTSP_OPEN_TIMEOUT_MS: int = Field(default=5000, gt=0)
+    RTSP_READ_TIMEOUT_MS: int = Field(default=5000, gt=0)
     STREAM_PREVIEW_FPS: int = 15
     RECOGNITION_INTERVAL_FRAMES: int = 5
     RECOGNITION_MAX_STALE_MS: int = 1000
@@ -80,6 +84,28 @@ class Settings(BaseSettings):
             return int(self.CAMERA_SOURCE)
         except ValueError:
             return self.CAMERA_SOURCE
+
+    def camera_source_for(self, camera_id: str | None):
+        """Resolve a named camera on the server; never accept URLs from clients."""
+        if camera_id is None:
+            return self.camera_source_parsed  # Legacy clients still use CAMERA_SOURCE.
+        if camera_id == "webcam":
+            return 0
+        presets = {
+            "imou_rotate": ("Cam IMOU xoay", self.CAMERA_IMOU_ROTATE_RTSP,
+                            "CAMERA_IMOU_ROTATE_RTSP"),
+            "imou_fixed": ("Cam IMOU cứng", self.CAMERA_IMOU_FIXED_RTSP,
+                           "CAMERA_IMOU_FIXED_RTSP"),
+        }
+        if camera_id not in presets:
+            raise ValueError("Nguồn camera không hợp lệ.")
+        label, source, variable = presets[camera_id]
+        source = source.strip()
+        if not source:
+            raise ValueError(f"Chưa cấu hình {label}. Hãy nhập {variable} trong .env rồi khởi động lại backend.")
+        if not source.lower().startswith(("rtsp://", "rtsps://")):
+            raise ValueError(f"{variable} phải là URL RTSP hợp lệ.")
+        return source
 
     def ensure_directories(self):
         """Create all required data directories if they don't exist."""

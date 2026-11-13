@@ -28,10 +28,12 @@ _liveness_cache = {}
 _welcome_cache = {}
 _stream_frame_counter = 0
 _recognition_frame_counter = 0
+_camera_stream_lock = asyncio.Lock()
 
 # Max frame dimension for detection (resize larger frames)
 MAX_DETECT_DIM = 480
 WELCOME_REPEAT_SECONDS = 8
+MAX_BROWSER_FRAME_BYTES = 5 * 1024 * 1024
 
 
 async def camera_stream_handler(
@@ -54,8 +56,27 @@ async def camera_stream_handler(
     logger.info("WebSocket client connected for camera stream")
     global _stream_frame_counter, _recognition_frame_counter
 
-    if not camera_service.is_running:
-        camera_service.start()
+    # Previous fixed source selection, kept for quick restoration:
+    # browser_camera = str(settings.CAMERA_SOURCE).strip().lower() == "browser"
+    # if not browser_camera and not camera_service.is_running:
+    #     camera_service.start()
+    try:
+        source = settings.camera_source_for(websocket.query_params.get("camera"))
+    except ValueError as exc:
+        await websocket.send_json({"type": "error", "message": str(exc)})
+        await websocket.close(code=1008)
+        return
+
+    # One shared capture: do not let another tab change it mid-stream.
+    if _camera_stream_lock.locked():
+        await websocket.send_json({
+            "type": "error",
+            "message": "Camera đang được sử dụng. Hãy dừng phiên camera đang mở rồi thử lại.",
+        })
+        await websocket.close(code=1013)
+        return
+    await _camera_stream_lock.acquire()
+    browser_camera = str(source).strip().lower() == "browser"
 
     loop = asyncio.get_event_loop()
     preview_interval = 1.0 / max(1, settings.STREAM_PREVIEW_FPS)
@@ -68,14 +89,39 @@ async def camera_stream_handler(
     latest_recognition_at = 0.0
 
     try:
+        if camera_service.source != source:
+            await asyncio.to_thread(camera_service.stop)
+            camera_service.source = source
+        if not browser_camera and not camera_service.is_running:
+            camera_service.start()
+
+        await websocket.send_json({
+            "type": "camera_mode",
+            "mode": "browser" if browser_camera else "backend",
+            "preview_fps": settings.STREAM_PREVIEW_FPS,
+        })
+
         while True:
             _stream_frame_counter += 1
             start_time = time.time()
             attendance_events = []
             recognition_ran = False
 
-            # Get frame from camera
-            frame = camera_service.get_frame()
+            # Docker Desktop cannot access a Windows webcam as /dev/video0.
+            # In browser mode, the page captures and sends JPEG frames instead.
+            if browser_camera:
+                payload = await websocket.receive_bytes()
+                frame = _decode_browser_frame(payload)
+                if frame is None:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Invalid or oversized camera frame",
+                    })
+                    continue
+                camera_service.set_external_stream_active(True)
+            else:
+                frame = camera_service.get_frame()
+
             if frame is None:
                 status = camera_service.get_status()
                 message = "Camera is starting" if status.get("starting") else "Camera not available"
@@ -167,7 +213,27 @@ async def camera_stream_handler(
     finally:
         _liveness_cache.clear()
         _welcome_cache.clear()
-        camera_service.stop()
+        # Previous cleanup, kept for quick restoration:
+        # if browser_camera:
+        #     camera_service.set_external_stream_active(False)
+        # else:
+        #     camera_service.stop()
+        try:
+            if browser_camera:
+                camera_service.set_external_stream_active(False)
+            else:
+                await asyncio.to_thread(camera_service.stop)
+        finally:
+            _camera_stream_lock.release()
+
+
+def _decode_browser_frame(payload: bytes) -> np.ndarray | None:
+    """Decode a bounded JPEG payload received from a browser camera."""
+    if not payload or len(payload) > MAX_BROWSER_FRAME_BYTES:
+        return None
+
+    encoded = np.frombuffer(payload, dtype=np.uint8)
+    return cv2.imdecode(encoded, cv2.IMREAD_COLOR)
 
 
 def _run_recognition(

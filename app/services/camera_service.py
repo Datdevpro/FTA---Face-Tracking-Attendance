@@ -30,15 +30,20 @@ class CameraService:
         width: int = 640,
         height: int = 480,
         fps: int = 30,
+        rtsp_open_timeout_ms: int = 5000,
+        rtsp_read_timeout_ms: int = 5000,
     ):
         self.source = source
         self.width = width
         self.height = height
         self.fps = fps
+        self.rtsp_open_timeout_ms = rtsp_open_timeout_ms
+        self.rtsp_read_timeout_ms = rtsp_read_timeout_ms
 
         self._cap: Optional[cv2.VideoCapture] = None
         self._frame: Optional[np.ndarray] = None
         self._lock = threading.Lock()
+        self._stop_lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._connected = False
@@ -48,6 +53,10 @@ class CameraService:
 
     def start(self):
         """Start the camera capture thread without blocking on device connection."""
+        if self.uses_external_frames:
+            logger.info("Browser camera mode enabled; waiting for WebSocket frames")
+            return
+
         if self._running:
             return
 
@@ -59,15 +68,21 @@ class CameraService:
 
     def stop(self):
         """Stop the camera capture thread."""
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=1)
-            self._thread = None
-        self._disconnect()
-        self._starting = False
-        self._frame_count = 0
-        self._last_frame_time = 0.0
-        logger.info("Camera stopped")
+        # HTTP stop and WebSocket cleanup can arrive together.
+        with self._stop_lock:
+            self._running = False
+            if self._thread:
+                # Previous stop behavior, kept for quick restoration:
+                # self._thread.join(timeout=1)
+                # RTSP open/read calls have their own timeouts. Wait for the worker
+                # before releasing FFmpeg resources to avoid release/read races.
+                self._thread.join(timeout=None if self.uses_rtsp else 1)
+                self._thread = None
+            self._disconnect()
+            self._starting = False
+            self._frame_count = 0
+            self._last_frame_time = 0.0
+            logger.info("Camera stopped")
 
     def get_frame(self) -> Optional[np.ndarray]:
         """
@@ -86,6 +101,9 @@ class CameraService:
         Capture a single frame without the background thread.
         Useful for one-off captures (e.g., face registration).
         """
+        if self.uses_external_frames:
+            return None
+
         if not self._connected:
             self._connect()
 
@@ -95,10 +113,36 @@ class CameraService:
                 return frame
         return None
 
+    def set_external_stream_active(self, active: bool):
+        """Reflect browser-stream state in camera status and health endpoints."""
+        if not self.uses_external_frames:
+            return
+        self._connected = active
+        self._running = active
+        self._starting = False
+
     def _connect(self):
         """Connect to the camera."""
         try:
-            if isinstance(self.source, int) and sys.platform.startswith("win"):
+            # Previous connection code, kept for quick restoration:
+            # if isinstance(self.source, int) and sys.platform.startswith("win"):
+            #     self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
+            # else:
+            #     self._cap = cv2.VideoCapture(self.source)
+
+            # Release the previous connection and stale frame before reconnecting.
+            self._disconnect()
+            if self.uses_rtsp:
+                # Timeouts must be supplied when opening the FFmpeg capture.
+                self._cap = cv2.VideoCapture(
+                    self.source,
+                    cv2.CAP_FFMPEG,
+                    [
+                        cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self.rtsp_open_timeout_ms,
+                        cv2.CAP_PROP_READ_TIMEOUT_MSEC, self.rtsp_read_timeout_ms,
+                    ],
+                )
+            elif isinstance(self.source, int) and sys.platform.startswith("win"):
                 self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
             else:
                 self._cap = cv2.VideoCapture(self.source)
@@ -159,12 +203,24 @@ class CameraService:
                 logger.error(f"Capture error: {e}")
                 self._connected = False
 
-            # Frame rate control
-            time.sleep(frame_interval)
+            # Previous frame rate control, kept for quick restoration:
+            # time.sleep(frame_interval)
+            # Drain RTSP at the camera's rate to avoid accumulating old frames.
+            # Preview and recognition rates remain controlled by the WebSocket.
+            if not self.uses_rtsp:
+                time.sleep(frame_interval)
 
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def uses_external_frames(self) -> bool:
+        return str(self.source).strip().lower() == "browser"
+
+    @property
+    def uses_rtsp(self) -> bool:
+        return str(self.source).strip().lower().startswith(("rtsp://", "rtsps://"))
 
     @property
     def is_running(self) -> bool:
@@ -182,6 +238,7 @@ class CameraService:
         """Get camera status info."""
         return {
             "source": str(self.source),
+            "mode": "browser" if self.uses_external_frames else "backend",
             "connected": self._connected,
             "running": self._running,
             "starting": self.is_starting,
