@@ -6,9 +6,9 @@
     <meta name="description" content="FTA - Camera trực tiếp nhận diện khuôn mặt">
     <title>Camera trực tiếp | FTA</title>
     <link rel="icon" type="image/png" href="/static/icon2.png?v=2">
-    <link rel="stylesheet" href="css/style.css?v=camera-controls-2">
+    <link rel="stylesheet" href="css/style.css?v=live-layout-3">
 </head>
-<body>
+<body class="live-monitor-page">
     <div class="app-layout">
         <aside class="sidebar"></aside>
 
@@ -22,11 +22,12 @@
                 </div>
             </header>
 
-            <div class="page-content">
-                <div class="grid-2">
+            <div class="page-content live-monitor-content">
+                <!-- Previous layout: grid-2 with detected faces below Camera Feed. -->
+                <div class="live-monitor-layout">
                     <!-- Camera Feed -->
-                    <div>
-                        <div class="card mb-6">
+                    <div class="live-camera-column">
+                        <div class="card live-camera-card">
                             <div class="card-header camera-feed-header">
                                 <h2 class="card-title">Camera Feed</h2>
                                 <!-- Previous controls: <div class="flex gap-2"> -->
@@ -57,30 +58,30 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
+                    <!-- Detected Faces + Attendance Log + Welcome Screen -->
+                    <div class="live-side-column">
                         <!-- Detected Faces -->
-                        <div class="card">
+                        <div class="card live-scroll-card detected-faces-card">
                             <div class="card-header">
-                                <h2 class="card-title">Khuôn mặt phát hiện</h2>
+                                <h2 class="card-title" id="detectedFacesTitle">Thông tin nhận diện</h2>
                                 <span class="badge badge-info" id="faceCount">0 faces</span>
                             </div>
-                            <div class="card-body" id="detectedFaces">
+                            <div class="card-body" id="detectedFaces" tabindex="0" role="region" aria-labelledby="detectedFacesTitle">
                                 <div class="empty-state">
                                     <div class="empty-state-icon">🔍</div>
                                     <div class="empty-state-desc">Bắt đầu camera để nhận diện</div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Attendance Log + Welcome Screen -->
-                    <div class="live-side-column">
-                        <div class="card attendance-card-compact mb-6">
+                        <div class="card live-scroll-card attendance-card-compact">
                             <div class="card-header">
-                                <h2 class="card-title">Chấm công hôm nay</h2>
+                                <h2 class="card-title" id="attendanceLogTitle">Chấm công hôm nay</h2>
                                 <span class="badge badge-success" id="attendanceCount">0</span>
                             </div>
-                            <div class="card-body" id="attendanceLog">
+                            <div class="card-body" id="attendanceLog" tabindex="0" role="region" aria-labelledby="attendanceLogTitle">
                                 <div class="empty-state">
                                     <div class="empty-state-icon">📋</div>
                                     <div class="empty-state-title">Đang chờ...</div>
@@ -91,7 +92,7 @@
 
                         <div class="card welcome-card">
                             <div class="card-header">
-                                <h2 class="card-title">Welcome screen</h2>
+                                <h2 class="card-title">Chào đón nhân sự</h2>
                                 <span class="badge badge-info" id="welcomeStatus">Ready</span>
                             </div>
                             <div class="card-body">
