@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 1900
 
     # --- Database ---
     # SQLite is the temporary local default.

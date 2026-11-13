@@ -111,7 +111,7 @@ echo ============================================================
 echo.
 echo Login:    admin / admin123
 echo Start:    Double-click start-fta.bat
-echo Website:  http://localhost:8000
+echo Website:  http://localhost:1900
 echo.
 pause
 exit /b 0

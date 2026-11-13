@@ -342,7 +342,7 @@ def stop_camera():
 
 
 # ---------------------------------------------------------------------------
-# Run with: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Run with: uvicorn app.main:app --reload --host 0.0.0.0 --port 1900
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn

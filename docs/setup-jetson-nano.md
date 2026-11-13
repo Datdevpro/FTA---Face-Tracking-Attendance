@@ -35,7 +35,7 @@ bash start-fta-jetson.sh
 
 Giữ terminal mở trong lúc sử dụng. Nhấn Ctrl+C để dừng; chạy lại cùng lệnh để khởi động. Script không tạo dịch vụ tự chạy lúc boot.
 
-Mở `http://IP_JETSON:8000` từ máy cùng mạng. Xem IP bằng `hostname -I`. Nếu đổi `PORT` trong `.env`, dùng cổng tương ứng. Tài khoản mặc định khi database mới là `admin` / `admin123`; đổi mật khẩu qua API `/api/auth/change-password` trong `/docs` sau khi đăng nhập.
+Mở `http://IP_JETSON:1900` từ máy cùng mạng. Xem IP bằng `hostname -I`. Nếu đổi `PORT` trong `.env`, dùng cổng tương ứng. Tài khoản mặc định khi database mới là `admin` / `admin123`; đổi mật khẩu qua API `/api/auth/change-password` trong `/docs` sau khi đăng nhập.
 
 Launcher dùng một Uvicorn worker, tắt reload, ép provider CPU và đặt múi giờ UTC+7 cho tiến trình. Có thể chọn múi giờ khác bằng biến `FTA_TIMEZONE`; ví dụ `FTA_TIMEZONE=UTC bash start-fta-jetson.sh`. Đồng hồ host vẫn cần chính xác. POSIX `UTC-7` nghĩa là UTC+07:00.
 
@@ -45,7 +45,7 @@ Sửa `.env` ở gốc repository, rồi dừng và khởi động lại ứng d
 
 ```dotenv
 HOST=0.0.0.0
-PORT=8000
+PORT=1900
 DATABASE_URL=sqlite:///./data/fta.db
 CAMERA_SOURCE=0
 CAMERA_WIDTH=640
@@ -78,10 +78,10 @@ Với RTSP, đặt `CAMERA_SOURCE` thành URL thực tế. Camera CSI ribbon c�
 Trong terminal thứ hai, sau khi server báo khởi động xong:
 
 ```bash
-curl -fsS http://127.0.0.1:8000/api/health
-curl -fsS -X POST http://127.0.0.1:8000/api/camera/start
+curl -fsS http://127.0.0.1:1900/api/health
+curl -fsS -X POST http://127.0.0.1:1900/api/camera/start
 sleep 3
-curl -fsS http://127.0.0.1:8000/api/camera/status
+curl -fsS http://127.0.0.1:1900/api/camera/status
 ```
 
 Health cần có `face_model_loaded=true`, `face_provider_active=CPUExecutionProvider` và, nếu bật chống giả mạo, `anti_spoofing_model_loaded=true`. HTTP 200 hoặc `status=healthy` chưa bảo đảm model tải thành công. Camera chưa bật có thể báo `camera_connected=false`.

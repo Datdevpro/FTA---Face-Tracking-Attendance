@@ -83,7 +83,7 @@ Khi setup hoàn tất, run file:
 .\start-fta.bat
 ```
 
-Sau đó truy cập [http://localhost:8000](http://localhost:8000).
+Sau đó truy cập [http://localhost:1900](http://localhost:1900).
 
 #### Ubuntu 22.04 / 24.04
 
@@ -97,7 +97,7 @@ chmod +x setup-fta-ubuntu.sh
 Sau khi setup hoàn tất, chạy backend bằng:
 
 ```bash
-./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 1900
 ```
 
 Script Ubuntu mặc định sử dụng CPU. Wheel InsightFace trong `model_wheel` chỉ
@@ -139,9 +139,9 @@ python -m scripts.init_db
 
 | Dịch vụ | Địa chỉ |
 |:---|:---|
-| Dashboard | [http://localhost:8000](http://localhost:8000) |
-| Swagger UI | [http://localhost:8000/docs](http://localhost:8000/docs) |
-| Health check | [http://localhost:8000/api/health](http://localhost:8000/api/health) |
+| Dashboard | [http://localhost:1900](http://localhost:1900) |
+| Swagger UI | [http://localhost:1900/docs](http://localhost:1900/docs) |
+| Health check | [http://localhost:1900/api/health](http://localhost:1900/api/health) |
 
 Tài khoản mặc định: `admin` / `admin123`. Hãy đổi mật khẩu trước khi đưa hệ
 thống cho người dùng thật.

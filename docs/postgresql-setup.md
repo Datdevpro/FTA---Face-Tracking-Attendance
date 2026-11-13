@@ -79,7 +79,7 @@ Change the default password before using a production or pilot environment.
 or:
 
 ```powershell
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 1900
 ```
 
 ## Notes

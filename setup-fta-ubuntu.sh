@@ -131,8 +131,8 @@ cat <<'EOF'
 ============================================================
 
 Login:    admin / admin123
-Start:    ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-Website:  http://localhost:8000
+Start:    ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 1900
+Website:  http://localhost:1900
 
 Change the default admin password before using real employee data.
 EOF
