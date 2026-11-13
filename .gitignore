@@ -19,6 +19,7 @@ data/models/anti_spoofing/*
 !data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx
 data/snapshots/
 data/fta.db
+data/fta.db-*
 data/pending_checkouts.json
 data/pending_checkouts.json.tmp
 
