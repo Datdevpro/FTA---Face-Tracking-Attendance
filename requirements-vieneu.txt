@@ -1,0 +1,2 @@
+# Install into .venv-vieneu, separate from FTA's CUDA/face recognition environment.
+vieneu==3.8.4

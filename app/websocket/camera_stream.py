@@ -22,12 +22,8 @@ from app.config import settings
 from app.core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
-_employee_name_cache = {}
-_employee_info_cache = {}
-_liveness_cache = {}
 _welcome_cache = {}
 _stream_frame_counter = 0
-_recognition_frame_counter = 0
 _camera_stream_lock = asyncio.Lock()
 
 # Max frame dimension for detection (resize larger frames)
@@ -40,9 +36,9 @@ async def camera_stream_handler(
     websocket: WebSocket,
     face_service,
     face_index,
-    anti_spoofing,
     attendance_service,
     camera_service,
+    camera_audio_service=None,
 ):
     """
     WebSocket endpoint for live camera recognition stream.
@@ -54,7 +50,7 @@ async def camera_stream_handler(
     """
     await websocket.accept()
     logger.info("WebSocket client connected for camera stream")
-    global _stream_frame_counter, _recognition_frame_counter
+    global _stream_frame_counter
 
     # Previous fixed source selection, kept for quick restoration:
     # browser_camera = str(settings.CAMERA_SOURCE).strip().lower() == "browser"
@@ -142,6 +138,9 @@ async def camera_stream_handler(
                     latest_recognition_time_ms = result["recognition_time_ms"]
                     latest_recognition_at = time.time()
                     recognition_ran = True
+                    if camera_audio_service is not None:
+                        for welcome_event in welcome_events:
+                            camera_audio_service.enqueue(welcome_event)
                 except Exception as e:
                     logger.error(f"Recognition worker error: {e}")
                 finally:
@@ -155,15 +154,12 @@ async def camera_stream_handler(
                 )
             )
             if should_run_recognition:
-                _recognition_frame_counter += 1
                 recognition_future = loop.run_in_executor(
                     None,
                     _run_recognition,
                     frame.copy(),
-                    _recognition_frame_counter,
                     face_service,
                     face_index,
-                    anti_spoofing,
                     attendance_service,
                 )
 
@@ -211,7 +207,6 @@ async def camera_stream_handler(
         except Exception:
             pass
     finally:
-        _liveness_cache.clear()
         _welcome_cache.clear()
         # Previous cleanup, kept for quick restoration:
         # if browser_camera:
@@ -238,14 +233,12 @@ def _decode_browser_frame(payload: bytes) -> np.ndarray | None:
 
 def _run_recognition(
     frame: np.ndarray,
-    recognition_index: int,
     face_service,
     face_index,
-    anti_spoofing,
     attendance_service,
 ) -> dict:
     """
-    Run face detection, recognition, liveness, and attendance.
+    Run face detection, recognition, and attendance.
     Runs in a thread pool executor.
     """
     start_time = time.time()
@@ -276,9 +269,6 @@ def _run_recognition(
             name = "Unknown"
             employee_id = None
             similarity = 0.0
-            is_live = True
-            liveness_score = None
-            liveness_checked = False
             color = (0, 0, 255)  # Red for unknown
 
             # Search in FAISS index
@@ -293,35 +283,22 @@ def _run_recognition(
                 employee_info = _get_employee_info(employee_id)
                 name = employee_info["name"]
 
-                if settings.ANTI_SPOOFING_ENABLED:
-                    is_live, liveness_score, liveness_checked = _get_liveness_result(
-                        employee_id,
-                        recognition_index,
-                        frame,
-                        bbox,
-                        anti_spoofing,
+                if _should_emit_welcome(employee_id):
+                    welcome_events.append(
+                        _build_welcome_event(employee_info, frame, bbox)
                     )
-                    if not is_live:
-                        name = "SPOOF DETECTED"
-                        color = (0, 0, 255)
 
-                if is_live:
-                    if _should_emit_welcome(employee_id):
-                        welcome_events.append(
-                            _build_welcome_event(employee_info, frame, bbox)
-                        )
-
-                    db: Session = SessionLocal()
-                    try:
-                        event = attendance_service.process_recognition(
-                            db=db,
-                            employee_id=employee_id,
-                            confidence=similarity,
-                        )
-                        if event:
-                            attendance_events.append(event)
-                    finally:
-                        db.close()
+                db: Session = SessionLocal()
+                try:
+                    event = attendance_service.process_recognition(
+                        db=db,
+                        employee_id=employee_id,
+                        confidence=similarity,
+                    )
+                    if event:
+                        attendance_events.append(event)
+                finally:
+                    db.close()
 
             faces_data.append({
                 "name": name,
@@ -329,9 +306,6 @@ def _run_recognition(
                 "similarity": round(similarity, 4),
                 "bbox": [x1, y1, x2, y2],
                 "det_score": round(face.det_score, 3),
-                "is_live": is_live,
-                "liveness_score": round(liveness_score, 3) if liveness_score is not None else None,
-                "liveness_checked": liveness_checked,
             })
 
     except Exception as e:
@@ -348,7 +322,7 @@ def _run_recognition(
 def _build_welcome_event(employee_info: dict, frame: np.ndarray, bbox: np.ndarray) -> dict:
     """Build a UI welcome payload with a cropped capture of the recognized face."""
     name = employee_info.get("name") or "bạn"
-    message = f"Xin chào {name}. Chúc bạn một ngày tốt lành."
+    message = employee_info.get("welcome_text") or f"Xin chào {name}. Chúc bạn một ngày tốt lành."
     captured_frame = _encode_face_capture(frame, bbox)
 
     return {
@@ -356,6 +330,7 @@ def _build_welcome_event(employee_info: dict, frame: np.ndarray, bbox: np.ndarra
         "employee_code": employee_info.get("code"),
         "employee_name": name,
         "message": message,
+        "greeting_managed": employee_info.get("greeting_managed", False),
         "image": captured_frame,
         "time": datetime.now().isoformat(),
     }
@@ -393,11 +368,8 @@ def _draw_overlay(frame: np.ndarray, faces_data: list[dict]) -> np.ndarray:
         x1, y1, x2, y2 = [int(v) for v in face.get("bbox", [0, 0, 0, 0])]
         employee_id = face.get("employee_id")
         name = face.get("name") or "Unknown"
-        is_live = face.get("is_live", True)
 
-        if not is_live:
-            color = (0, 0, 255)
-        elif employee_id:
+        if employee_id:
             color = (0, 255, 0)
         else:
             color = (0, 0, 255)
@@ -435,27 +407,20 @@ def _get_employee_name(employee_id: int) -> str:
 
 
 def _get_employee_info(employee_id: int) -> dict:
-    cached_info = _employee_info_cache.get(employee_id)
-    if cached_info:
-        return cached_info
-
-    cached_name = _employee_name_cache.get(employee_id)
-    if cached_name:
-        return {"id": employee_id, "code": None, "name": cached_name}
-
     db: Session = SessionLocal()
     try:
         from app.models.employee import Employee
 
         employee = db.query(Employee).filter(Employee.id == employee_id).first()
         if employee:
+            from app.services.employee_greetings import info as greeting_info
             info = {
                 "id": employee.id,
                 "code": employee.employee_code,
                 "name": employee.full_name,
+                "greeting_managed": True,
+                **greeting_info(db, employee),
             }
-            _employee_name_cache[employee_id] = employee.full_name
-            _employee_info_cache[employee_id] = info
             return info
     finally:
         db.close()
@@ -471,26 +436,3 @@ def _should_emit_welcome(employee_id: int) -> bool:
 
     _welcome_cache[employee_id] = now
     return True
-
-
-def _get_liveness_result(
-    employee_id: int,
-    frame_index: int,
-    frame: np.ndarray,
-    bbox: np.ndarray,
-    anti_spoofing,
-) -> tuple[bool, float, bool]:
-    interval = max(1, settings.ANTI_SPOOFING_INTERVAL_FRAMES)
-    cached = _liveness_cache.get(employee_id)
-
-    if cached and frame_index % interval != 0:
-        return cached["is_live"], cached["score"], False
-
-    is_live, score = anti_spoofing.check_liveness(frame, bbox)
-    _liveness_cache[employee_id] = {
-        "is_live": is_live,
-        "score": score,
-        "frame_index": frame_index,
-        "checked_at": time.time(),
-    }
-    return is_live, score, True

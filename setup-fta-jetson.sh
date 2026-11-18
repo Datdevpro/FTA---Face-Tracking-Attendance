@@ -28,15 +28,14 @@ esac
 GLIBC_VERSION="$(getconf GNU_LIBC_VERSION | awk '{print $2}')"
 dpkg --compare-versions "$GLIBC_VERSION" ge 2.27 || die "glibc 2.27+ is required; found $GLIBC_VERSION."
 for required in .env.example requirements-jetson.txt start-fta-jetson.sh \
-    app/main.py scripts/init_db.py frontend/index.html \
-    data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx; do
+    app/main.py scripts/init_db.py frontend/index.html; do
     [[ -s "$required" ]] || die "Missing $required. Copy the complete FTA source to this device."
 done
 JOBS="${FTA_BUILD_JOBS:-1}"
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || die "FTA_BUILD_JOBS must be a positive integer."
 export MAKEFLAGS="-j$JOBS" CMAKE_BUILD_PARALLEL_LEVEL="$JOBS"
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
-export FACE_ONNX_PROVIDER=cpu ANTI_SPOOFING_PROVIDER=cpu DEBUG=false
+export FACE_ONNX_PROVIDER=cpu DEBUG=false
 export TZ="${FTA_TIMEZONE:-UTC-7}"
 info "Native installation on ${PRETTY_NAME:-Linux}, glibc $GLIBC_VERSION; CPU inference."
 free -h
@@ -107,7 +106,7 @@ path = Path('.env')
 original = path.read_text(encoding='utf-8-sig')
 text = original
 values = dotenv_values(path)
-updates = {'FACE_ONNX_PROVIDER': 'cpu', 'ANTI_SPOOFING_PROVIDER': 'cpu', 'DEBUG': 'false'}
+updates = {'FACE_ONNX_PROVIDER': 'cpu', 'DEBUG': 'false'}
 samples = {'', 'replace-me-with-a-random-secret', 'your-super-secret-key-change-this-in-production', 'fta-dev-secret-key-change-in-production'}
 if (values.get('JWT_SECRET_KEY') or '') in samples:
     updates['JWT_SECRET_KEY'] = secrets.token_hex(32)
@@ -136,20 +135,6 @@ service = FaceRecognitionService(settings.FACE_MODEL_NAME, settings.MODELS_DIR, 
 service.initialize()
 assert service.is_initialized and service.active_provider == 'CPUExecutionProvider'
 print('Face model ready on CPU')
-PY
-# Release face model RAM before testing anti-spoofing in another process.
-"$PY" - <<'PY'
-from app.config import settings
-from app.services.anti_spoofing import AntiSpoofingService
-if settings.ANTI_SPOOFING_ENABLED:
-    service = AntiSpoofingService(settings.ANTI_SPOOFING_MODEL_PATH,
-        threshold=settings.ANTI_SPOOFING_THRESHOLD, onnx_provider='cpu',
-        crop_scale=settings.ANTI_SPOOFING_CROP_SCALE)
-    service.initialize()
-    assert service.is_initialized and service.active_provider == 'CPUExecutionProvider'
-    print('Anti-spoofing model ready on CPU')
-else:
-    print('Anti-spoofing is disabled in your configuration.')
 PY
 chmod +x start-fta-jetson.sh
 info "Setup complete. Models loaded successfully; camera and attendance still need a live test."

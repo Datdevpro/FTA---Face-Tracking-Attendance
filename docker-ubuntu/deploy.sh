@@ -60,11 +60,6 @@ else
     exit 1
 fi
 
-if [[ ! -f data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx ]]; then
-    echo "[ERROR] The anti-spoofing ONNX model is missing from data/models." >&2
-    exit 1
-fi
-
 JETSON_ENV="$DOCKER_DIR/.env"
 JETSON_ENV_EXAMPLE="$DOCKER_DIR/.env.example"
 if [[ ! -f "$JETSON_ENV" ]]; then

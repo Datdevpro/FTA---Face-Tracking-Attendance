@@ -15,6 +15,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.security import hash_password
 from app.models.department import Department
 from app.models.employee import Employee
+from app.models.employee_greeting import EmployeeGreeting
 from app.models.face_encoding import FaceEncoding
 from app.models.attendance import AttendanceRecord, WorkSchedule
 from app.models.user import AdminUser, SystemLog

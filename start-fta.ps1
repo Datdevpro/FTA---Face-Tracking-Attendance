@@ -23,7 +23,16 @@ if (-not $NoReload) {
     $ReloadArgs = @("--reload")
 }
 
+& $PythonExe -m scripts.start_go2rtc
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "FTA will start, but camera audio may be unavailable."
+}
+
 Write-Host "Starting FTA server..." -ForegroundColor Cyan
+& $PythonExe -m scripts.start_vieneu
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "VieNeu unavailable; Edge TTS will be used."
+}
 Write-Host "Dashboard: http://localhost:$Port" -ForegroundColor Green
 Write-Host "API Docs:  http://localhost:$Port/docs" -ForegroundColor Green
 Write-Host ""

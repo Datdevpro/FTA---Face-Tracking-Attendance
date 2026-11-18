@@ -14,7 +14,7 @@ on the host's Ubuntu 18.04 Python 3.6 installation.
 
 ## Important GPU limitation
 
-The provided Jetson image runs InsightFace and anti-spoofing through
+The provided Jetson image runs InsightFace through
 `CPUExecutionProvider`. Do not change the provider values to `cuda` in this
 image.
 
@@ -27,7 +27,7 @@ image:
 - <https://github.com/microsoft/onnxruntime/blob/main/dockerfiles/README.md#nvidia-jetson-tx1tx2nanoxavier>
 
 GPU support therefore needs a separate, tested image or a TensorRT conversion
-of the InsightFace and anti-spoofing models. The current package prioritizes a
+of the InsightFace model. The current package prioritizes a
 repeatable image that can actually build and run on Nano.
 
 ## Prerequisites on the Jetson
@@ -162,7 +162,6 @@ The defaults in `docker-ubuntu/.env` reduce load relative to desktop:
 CAMERA_FPS=15
 STREAM_PREVIEW_FPS=10
 RECOGNITION_INTERVAL_FRAMES=8
-ANTI_SPOOFING_INTERVAL_FRAMES=10
 ```
 
 If memory pressure is high, enable swap on the Jetson before building. Avoid

@@ -56,3 +56,9 @@ nguồn, chọn luồng phụ hoặc cấu hình trực tiếp trên camera.
 Đoạn mở camera và điều tiết FPS cũ được giữ dưới dạng comment trong
 `camera_service.py` để dễ khôi phục. Nhánh USB và chế độ `browser` vẫn hoạt động.
 Chức năng đăng ký khuôn mặt tiếp tục dùng webcam trình duyệt.
+
+## Phát lời chào qua loa camera
+
+Camera IMOU IPC-S2XEP-10M0S đã phát thành công file MP3 qua go2rtc bằng kênh
+âm thanh ngược ONVIF. Xem [hướng dẫn phát âm thanh qua loa camera](camera-audio-go2rtc.md)
+để cấu hình URL, chạy lệnh PowerShell và xử lý lỗi `can't find consumer`.

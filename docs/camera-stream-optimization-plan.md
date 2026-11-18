@@ -7,7 +7,7 @@ Make the live camera view feel smooth while keeping face recognition accurate en
 The current WebSocket pipeline sends frames only after AI processing:
 
 ```text
-camera frame -> face detection/recognition/liveness -> draw overlay -> JPEG/base64 -> browser
+camera frame -> face detection/recognition -> draw overlay -> JPEG/base64 -> browser
 ```
 
 This means the visible camera FPS is capped by AI processing time. For example, if one processed frame takes 220 ms, the UI can only show about 4.5 FPS.
@@ -31,13 +31,13 @@ This loop should avoid expensive AI work. Its job is to keep the video feed visu
 Runs less frequently, for example every 4-5 camera frames or every 300-500 ms:
 
 ```text
-latest camera frame -> face detection -> face recognition -> liveness -> attendance logic
+latest camera frame -> face detection -> face recognition -> attendance logic
 ```
 
 The recognition result is stored as the latest overlay state:
 
 ```text
-bbox, employee_id, name, similarity, liveness_score, timestamp
+bbox, employee_id, name, similarity, timestamp
 ```
 
 ### Overlay Strategy
@@ -59,7 +59,6 @@ For attendance use, this is acceptable because the user is usually standing in f
 - Camera feed appears smoother.
 - GPU/CPU load is lower because AI does not run for every displayed frame.
 - Recognition can remain accurate enough for check-in/check-out.
-- Anti-spoofing can also run at a lower cadence, using cached liveness results between checks.
 
 ## Tradeoffs
 
@@ -74,7 +73,7 @@ Add lightweight tracking between recognition frames:
 
 - Run InsightFace every 4-5 frames.
 - Use OpenCV tracking or optical flow between AI frames to update bbox position.
-- Keep attendance decisions tied to actual AI/liveness frames, not tracker-only frames.
+- Keep attendance decisions tied to actual recognition frames, not tracker-only frames.
 
 ## Suggested Implementation Steps
 

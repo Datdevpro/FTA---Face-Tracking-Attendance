@@ -4,13 +4,15 @@ Employee management API endpoints.
 
 import math
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.employee import Employee
 from app.models.face_encoding import FaceEncoding
+from app.services import employee_greetings as greetings
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeUpdate,
@@ -31,6 +33,7 @@ def _employee_to_response(employee: Employee, db: Session) -> EmployeeResponse:
     dept_name = employee.department.name if employee.department else None
 
     return EmployeeResponse(
+        **greetings.info(db, employee),
         id=employee.id,
         employee_code=employee.employee_code,
         full_name=employee.full_name,
@@ -104,6 +107,7 @@ def list_employees(
 @router.post("", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 def create_employee(
     data: EmployeeCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -131,10 +135,19 @@ def create_employee(
                 detail=f"Email '{data.email}' already registered",
             )
 
-    employee = Employee(**data.model_dump())
+    values = data.model_dump()
+    template, voice = values.pop("welcome_template"), values.pop("welcome_voice")
+    try:
+        greetings.render(template or greetings.DEFAULT_TEMPLATE, data.full_name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    employee = Employee(**values)
     db.add(employee)
+    db.flush()
+    greetings.configure(db, employee, template, voice)
     db.commit()
     db.refresh(employee)
+    background_tasks.add_task(greetings.generate, employee.id)
 
     return _employee_to_response(employee, db)
 
@@ -165,6 +178,7 @@ def get_employee(
 def update_employee(
     employee_id: int,
     data: EmployeeUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -177,6 +191,15 @@ def update_employee(
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    default_voice_requested = "welcome_voice" in update_data and update_data["welcome_voice"] is None
+    template, voice = update_data.pop("welcome_template", None), update_data.pop("welcome_voice", None)
+    if default_voice_requested:
+        voice = greetings.settings.VIENEU_VOICE
+    current = greetings.info(db, employee)
+    try:
+        greetings.render(template or current["welcome_template"], update_data.get("full_name") or employee.full_name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     if "employee_code" in update_data and update_data["employee_code"] != employee.employee_code:
         existing = (
@@ -196,8 +219,10 @@ def update_employee(
     for key, value in update_data.items():
         setattr(employee, key, value)
 
+    greetings.configure(db, employee, template, voice)
     db.commit()
     db.refresh(employee)
+    background_tasks.add_task(greetings.generate, employee.id)
 
     return _employee_to_response(employee, db)
 
@@ -220,3 +245,27 @@ def delete_employee(
     db.commit()
 
     return {"message": f"Employee '{employee.full_name}' deactivated"}
+
+
+@router.post("/{employee_id}/welcome/regenerate")
+def regenerate_greeting(employee_id: int, background_tasks: BackgroundTasks,
+                        db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(404, "Employee not found")
+    row = greetings.configure(db, employee)
+    row.status, row.error = "pending", None
+    db.commit()
+    background_tasks.add_task(greetings.generate, employee_id, True)
+    return {"status": "pending"}
+
+
+@router.get("/{employee_id}/welcome/audio")
+def greeting_audio(employee_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(404, "Employee not found")
+    greeting = greetings.info(db, employee)
+    if greeting["welcome_status"] != "ready":
+        raise HTTPException(409, "Âm thanh chưa sẵn sàng")
+    return FileResponse(greetings.audio_path(greeting["welcome_audio_key"], ".mp3"), media_type="audio/mpeg")

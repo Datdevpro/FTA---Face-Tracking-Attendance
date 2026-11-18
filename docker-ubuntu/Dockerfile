@@ -60,8 +60,6 @@ COPY --from=builder /opt/venv /opt/venv
 COPY app ./app
 COPY frontend ./frontend
 COPY scripts ./scripts
-COPY data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx \
-    ./data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx
 COPY docker-ubuntu/entrypoint.sh /usr/local/bin/fta-entrypoint
 
 RUN chmod +x /usr/local/bin/fta-entrypoint \

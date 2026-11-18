@@ -4,7 +4,7 @@ Quy trình này chạy bằng Python virtualenv trên Jetson, không dùng Docke
 
 ## Cài đặt
 
-Chép toàn bộ source lên Jetson, kể cả `.env.example` và model `data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx`. Không cần chép virtualenv từ Windows. Mở terminal tại thư mục FTA và chạy bằng tài khoản thường:
+Chép toàn bộ source lên Jetson, kể cả `.env.example`. Không cần chép virtualenv từ Windows. Mở terminal tại thư mục FTA và chạy bằng tài khoản thường:
 
 ```bash
 bash setup-fta-jetson.sh
@@ -23,7 +23,7 @@ Script thực hiện:
 3. Dùng Python 3.10 có sẵn nếu phù hợp; nếu thiếu, tải source Python 3.10.21 từ Python.org và build riêng trong `.jetson-python/`. Python hệ thống của JetPack được giữ nguyên.
 4. Tạo `.venv-jetson/`, cài `requirements-jetson.txt`, build InsightFace và kiểm tra import.
 5. Tạo `.env` nếu chưa có. Nếu thay đổi cấu hình có sẵn, lưu bản sao `.env.before-jetson-*`; đặt hai provider về CPU, tắt DEBUG và thay JWT secret mẫu. Giữ camera, database, dữ liệu và các thiết lập khác.
-6. Kiểm tra kết nối database, khởi tạo bảng/dữ liệu mặc định nếu thiếu, tải và kiểm tra model nhận diện/chống giả mạo.
+6. Kiểm tra kết nối database, khởi tạo bảng/dữ liệu mặc định nếu thiếu, tải và kiểm tra model nhận diện.
 
 Lần đầu cần Internet và có thể mất nhiều thời gian để build Python/InsightFace. Mặc định dùng một luồng build để hạn chế RAM; có thể đặt `FTA_BUILD_JOBS=2` nếu máy đủ bộ nhớ. Nếu bị OOM, đóng ứng dụng nặng và cấu hình swap theo hệ điều hành rồi chạy lại. Script không tự thay đổi swap hoặc phân vùng.
 
@@ -56,9 +56,6 @@ RECOGNITION_INTERVAL_FRAMES=8
 RECOGNITION_MAX_STALE_MS=1500
 FACE_MODEL_NAME=buffalo_l
 FACE_ONNX_PROVIDER=cpu
-ANTI_SPOOFING_ENABLED=true
-ANTI_SPOOFING_PROVIDER=cpu
-ANTI_SPOOFING_INTERVAL_FRAMES=10
 ```
 
 Các thông số tốc độ trên là điểm khởi đầu cho Nano; script giữ lại thông số camera đang có. FPS cấu hình không phải tốc độ nhận diện cam kết.
@@ -84,7 +81,7 @@ sleep 3
 curl -fsS http://127.0.0.1:1900/api/camera/status
 ```
 
-Health cần có `face_model_loaded=true`, `face_provider_active=CPUExecutionProvider` và, nếu bật chống giả mạo, `anti_spoofing_model_loaded=true`. HTTP 200 hoặc `status=healthy` chưa bảo đảm model tải thành công. Camera chưa bật có thể báo `camera_connected=false`.
+Health cần có `face_model_loaded=true` và `face_provider_active=CPUExecutionProvider`. HTTP 200 hoặc `status=healthy` chưa bảo đảm model tải thành công. Camera chưa bật có thể báo `camera_connected=false`.
 
 Tạo nhân viên, đăng ký ảnh khuôn mặt, thử nhận diện và kiểm tra giờ chấm công trong báo cáo. Chưa có kiểm chứng chạy đầy đủ hoặc benchmark trên kit vật lý cho bộ cài này.
 
@@ -99,7 +96,7 @@ tar -czf "backups/fta-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
 
 Lưu bản sao `.env` ở nơi riêng tư vì chứa thông tin truy cập. Với PostgreSQL có sẵn, script giữ URL và cài driver; cần backup database bằng công cụ PostgreSQL riêng. Script không cài PostgreSQL server.
 
-Model InsightFace nằm ở `data/models/models/buffalo_l/` với cấu hình mặc định. Model chống giả mạo nằm riêng tại `data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx`. Giữ cả hai khi cần chạy offline; giọng đọc edge-tts/gTTS vẫn cần Internet.
+Model InsightFace nằm ở `data/models/models/buffalo_l/` với cấu hình mặc định. Giữ model khi cần chạy offline; giọng đọc edge-tts/gTTS vẫn cần Internet.
 
 | Lỗi | Cách xử lý |
 | --- | --- |

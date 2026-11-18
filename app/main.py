@@ -25,9 +25,10 @@ from app.models.attendance import AttendanceRecord, WorkSchedule
 from app.models.user import AdminUser, SystemLog
 from app.services.face_recognition import FaceRecognitionService
 from app.services.face_index import FaceIndexManager
-from app.services.anti_spoofing import AntiSpoofingService
 from app.services.attendance_service import AttendanceService
 from app.services.camera_service import CameraService
+from app.services.camera_audio import CameraAudioService
+from app.services import employee_greetings
 
 
 import asyncio
@@ -61,12 +62,6 @@ face_service = FaceRecognitionService(
     onnx_provider=settings.FACE_ONNX_PROVIDER,
 )
 face_index = FaceIndexManager(index_dir=settings.FAISS_INDEX_DIR)
-anti_spoofing = AntiSpoofingService(
-    model_path=settings.ANTI_SPOOFING_MODEL_PATH,
-    threshold=settings.ANTI_SPOOFING_THRESHOLD,
-    onnx_provider=settings.ANTI_SPOOFING_PROVIDER,
-    crop_scale=settings.ANTI_SPOOFING_CROP_SCALE,
-)
 attendance_service = AttendanceService(
     pending_state_path=settings.ATTENDANCE_PENDING_STATE_PATH
 )
@@ -78,6 +73,7 @@ camera_service = CameraService(
     rtsp_open_timeout_ms=settings.RTSP_OPEN_TIMEOUT_MS,
     rtsp_read_timeout_ms=settings.RTSP_READ_TIMEOUT_MS,
 )
+camera_audio_service = CameraAudioService(settings)
 
 
 def _rebuild_faiss_index():
@@ -151,13 +147,6 @@ async def lifespan(app: FastAPI):
             f"Install insightface and download models to enable."
         )
 
-    # Initialize anti-spoofing after face recognition has prepared CUDA DLLs.
-    if settings.ANTI_SPOOFING_ENABLED:
-        try:
-            anti_spoofing.initialize()
-        except Exception as e:
-            logger.exception(f"Anti-spoofing model not loaded: {e}")
-
     # Initialize and rebuild FAISS index
     try:
         _rebuild_faiss_index()
@@ -170,6 +159,8 @@ async def lifespan(app: FastAPI):
         logger.exception("Unable to finalize pending checkouts during startup")
 
     rollover_task = asyncio.create_task(_attendance_rollover_worker())
+    camera_audio_service.start()
+    greeting_task = asyncio.create_task(employee_greetings.prepare_existing())
 
     logger.info("Application startup complete")
     logger.info(f"Dashboard: http://localhost:{settings.PORT}")
@@ -179,10 +170,14 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # --- Shutdown ---
+        greeting_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await greeting_task
         rollover_task.cancel()
         with suppress(asyncio.CancelledError):
             await rollover_task
         logger.info("Shutting down...")
+        await camera_audio_service.close()
         camera_service.stop()
         logger.info("Application shutdown complete")
 
@@ -280,9 +275,9 @@ async def websocket_camera_stream(websocket: WebSocket):
         websocket=websocket,
         face_service=face_service,
         face_index=face_index,
-        anti_spoofing=anti_spoofing,
         attendance_service=attendance_service,
         camera_service=camera_service,
+        camera_audio_service=camera_audio_service,
     )
 
 
@@ -309,11 +304,6 @@ def health_check():
         "face_provider_active": face_service.active_provider,
         "face_providers_active": face_service.active_providers,
         "face_using_gpu": face_service.is_using_gpu,
-        "anti_spoofing_enabled": settings.ANTI_SPOOFING_ENABLED,
-        "anti_spoofing_model_loaded": anti_spoofing.is_initialized,
-        "anti_spoofing_provider_active": anti_spoofing.active_provider,
-        "anti_spoofing_using_gpu": anti_spoofing.is_using_gpu,
-        "anti_spoofing_last_error": anti_spoofing.last_error,
         "faiss_index_faces": face_index.total_faces,
         "camera_connected": camera_service.is_connected,
     }

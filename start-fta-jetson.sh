@@ -8,7 +8,7 @@ if [[ ! -x "$PY" ]]; then
     exit 1
 fi
 # Native CPU runtime. POSIX TZ UTC-7 means Vietnam UTC+07:00.
-export FACE_ONNX_PROVIDER=cpu ANTI_SPOOFING_PROVIDER=cpu DEBUG=false
+export FACE_ONNX_PROVIDER=cpu DEBUG=false
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-2}"
 export TZ="${FTA_TIMEZONE:-UTC-7}"

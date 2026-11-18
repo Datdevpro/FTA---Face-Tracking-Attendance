@@ -1,5 +1,9 @@
 # Environment
 .env
+.venv-vieneu/
+data/logs/
+data/employee_greetings/
+/camera_test/
 FTA_venv/
 venv/
 .venv-jetson/
@@ -14,9 +18,6 @@ __pycache__/
 data/face_images/
 data/faiss_index/
 data/models/*
-!data/models/anti_spoofing/
-data/models/anti_spoofing/*
-!data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx
 data/snapshots/
 data/fta.db
 data/fta.db-*

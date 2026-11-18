@@ -10,11 +10,6 @@ mkdir -p \
     data/models \
     data/snapshots
 
-if [ ! -f data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx ]; then
-    echo "ERROR: anti-spoofing model is missing from /app/data/models/anti_spoofing" >&2
-    exit 1
-fi
-
 # Idempotently create tables, departments, work schedule, and the first admin.
 python -m scripts.init_db
 

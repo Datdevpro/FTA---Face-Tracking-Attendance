@@ -35,7 +35,7 @@
 nghiệp nhỏ và vừa. Hệ thống sử dụng các mô hình AI tiên tiến để nhận diện faceID của nhân viên một cách nhanh chóng và tiện lợi
 
 FTA cung cấp giao diện quản trị trên trình duyệt, camera trực tiếp qua WebSocket, 
-khả năng chống giả mạo, quản lý nhân viên, theo dõi chấm công và xuất báo cáo.
+quản lý nhân viên, theo dõi chấm công và xuất báo cáo.
 
 <a id="tinh-nang"></a>
 
@@ -43,7 +43,6 @@ khả năng chống giả mạo, quản lý nhân viên, theo dõi chấm công 
 
 - **Nhận diện khuôn mặt real-time** bằng InsightFace SCRFD và ArcFace.
 - **Không cần retrain** khi thêm dữ liệu nhân viên; embedding mới được đưa vào FAISS.
-- **Chống giả mạo khuôn mặt** bằng model anti-spoofing ONNX.
 - **Chấm công tự động** theo khung giờ check-in và check-out của doanh nghiệp.
 - **Camera trực tiếp** với bounding box và kết quả nhận diện qua WebSocket.
 - **Welcome screen và lời chào** khi nhận diện được nhân viên.
@@ -155,10 +154,8 @@ Change configurations in .env file with
 ```env
 ## if you wanna inference using cpu
 FACE_ONNX_PROVIDER=cpu
-ANTI_SPOOFING_PROVIDER=cpu
 ## if you wanna inference using gpu
 FACE_ONNX_PROVIDER=gpu
-ANTI_SPOOFING_PROVIDER=gpu
 ```
 
 
@@ -199,7 +196,6 @@ FTA/
 | Face Detection | InsightFace SCRFD |
 | Face Recognition | ArcFace `buffalo_l`, embedding 512 chiều |
 | Vector Search | FAISS `IndexFlatIP` |
-| Anti-spoofing | ONNX Runtime |
 | Database | SQLite cho local, PostgreSQL-ready |
 | Authentication | OAuth2 Password Flow, JWT |
 

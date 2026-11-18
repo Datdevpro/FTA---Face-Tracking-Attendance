@@ -2,12 +2,14 @@
 Employee schemas for API request/response validation.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import date, datetime
 
 
 class EmployeeCreate(BaseModel):
+    welcome_template: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    welcome_voice: Optional[str] = Field(default=None, min_length=1, max_length=80)
     employee_code: str
     full_name: str
     email: Optional[EmailStr] = None
@@ -20,6 +22,8 @@ class EmployeeCreate(BaseModel):
 
 
 class EmployeeUpdate(BaseModel):
+    welcome_template: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    welcome_voice: Optional[str] = Field(default=None, min_length=1, max_length=80)
     employee_code: Optional[str] = None
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -33,6 +37,12 @@ class EmployeeUpdate(BaseModel):
 
 
 class EmployeeResponse(BaseModel):
+    welcome_template: str = ""
+    welcome_voice: str = ""
+    welcome_text: str = ""
+    welcome_status: str = "pending"
+    welcome_error: Optional[str] = None
+    welcome_audio_key: Optional[str] = None
     id: int
     employee_code: str
     full_name: str

@@ -316,6 +316,4 @@ def recognition_status(current_user=Depends(get_current_user)):
         "total_employees_indexed": face_index_mgr.total_employees,
         "recognition_threshold": settings.FACE_RECOGNITION_THRESHOLD,
         "detection_threshold": settings.FACE_DETECTION_THRESHOLD,
-        "anti_spoofing_enabled": settings.ANTI_SPOOFING_ENABLED,
-        "anti_spoofing_interval_frames": settings.ANTI_SPOOFING_INTERVAL_FRAMES,
     }

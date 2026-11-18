@@ -6,7 +6,7 @@ PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
 # Project settings must come from .env, not inherited shell variables.
-unset DEBUG FACE_ONNX_PROVIDER ANTI_SPOOFING_PROVIDER || true
+unset DEBUG FACE_ONNX_PROVIDER || true
 
 on_error() {
     local exit_code=$?
@@ -108,12 +108,6 @@ echo "[6/8] Installing Python dependencies. This can take several minutes..."
 # against the local Python version using the compiler packages installed above.
 "$VENV_PYTHON" -m pip install --prefer-binary -r requirements.txt
 "$VENV_PYTHON" -m pip check
-
-ANTI_SPOOF_MODEL="data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx"
-if [[ ! -f "$ANTI_SPOOF_MODEL" ]]; then
-    echo "[ERROR] Missing anti-spoofing model: $ANTI_SPOOF_MODEL"
-    exit 1
-fi
 
 echo "[7/8] Creating the SQLite database and default account..."
 "$VENV_PYTHON" -m scripts.init_db

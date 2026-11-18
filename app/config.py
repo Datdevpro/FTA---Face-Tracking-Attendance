@@ -4,6 +4,8 @@ Application configuration loaded from environment variables.
 """
 
 from pathlib import Path
+from typing import Literal
+import sys
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -43,6 +45,27 @@ class Settings(BaseSettings):
     RECOGNITION_INTERVAL_FRAMES: int = 5
     RECOGNITION_MAX_STALE_MS: int = 1000
 
+    # --- Welcome audio sent to the configured go2rtc camera stream ---
+    CAMERA_AUDIO_ENABLED: bool = True
+    CAMERA_AUDIO_GO2RTC_URL: str = "http://127.0.0.1:1984"
+    CAMERA_AUDIO_STREAM: str = "imou"
+    CAMERA_AUDIO_FFMPEG_BIN: str = (
+        "./camera_test/ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    )
+    CAMERA_AUDIO_DIR: str = "./camera_test/welcome_audio"
+    # Set when go2rtc sees a shared directory at a different path (e.g. Docker).
+    CAMERA_AUDIO_GO2RTC_DIR: str = ""
+    CAMERA_AUDIO_QUEUE_SIZE: int = Field(default=5, ge=1, le=50)
+
+    # VieNeu runs in its own environment; Edge TTS and gTTS remain fallbacks.
+    TTS_PROVIDER: Literal["vieneu", "edge"] = "vieneu"
+    VIENEU_URL: str = "http://127.0.0.1:1985"
+    VIENEU_VOICE: str = "Mai Anh"
+    VIENEU_THREADS: int = Field(default=2, ge=1, le=8)
+    VIENEU_TIMEOUT_SECONDS: int = Field(default=20, ge=1, le=30)
+    EMPLOYEE_GREETING_DIR: str = "./data/employee_greetings"
+    EMPLOYEE_GREETING_GO2RTC_DIR: str = ""
+
     # --- Face Recognition ---
     FACE_MODEL_NAME: str = "buffalo_l"
     FACE_ONNX_PROVIDER: str = "cuda"
@@ -50,16 +73,6 @@ class Settings(BaseSettings):
     FACE_RECOGNITION_THRESHOLD: float = 0.5
     FACE_MIN_QUALITY: float = 0.3
     FACE_REGISTRATION_COUNT: int = 3
-
-    # --- Anti-Spoofing ---
-    ANTI_SPOOFING_ENABLED: bool = True
-    ANTI_SPOOFING_MODEL_PATH: str = (
-        "./data/models/anti_spoofing/AntiSpoofing_bin_1.5_128.onnx"
-    )
-    ANTI_SPOOFING_PROVIDER: str = "cuda"
-    ANTI_SPOOFING_THRESHOLD: float = 0.5
-    ANTI_SPOOFING_CROP_SCALE: float = 1.5
-    ANTI_SPOOFING_INTERVAL_FRAMES: int = 5
 
     # --- Attendance ---
     WORK_START_TIME: str = "08:30"

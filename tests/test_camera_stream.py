@@ -153,7 +153,7 @@ def test_websocket_uses_selected_source_and_releases_camera(monkeypatch, camera_
     service.get_status.return_value = {}
 
     asyncio.run(camera_stream.camera_stream_handler(
-        websocket, None, None, None, None, service,
+        websocket, None, None, None, service,
     ))
 
     assert service.source == expected
@@ -170,7 +170,7 @@ def test_unconfigured_camera_does_not_stop_or_change_current_camera(monkeypatch)
     websocket.send_json = AsyncMock()
     websocket.close = AsyncMock()
     service = Mock(source=0)
-    asyncio.run(camera_stream.camera_stream_handler(websocket, None, None, None, None, service))
+    asyncio.run(camera_stream.camera_stream_handler(websocket, None, None, None, service))
     service.stop.assert_not_called()
     service.start.assert_not_called()
     assert service.source == 0
@@ -186,8 +186,63 @@ def test_second_viewer_cannot_switch_or_stop_active_camera():
         websocket.close = AsyncMock()
         service = Mock(source="rtsp://example.test/active")
         async with camera_stream._camera_stream_lock:
-            await camera_stream.camera_stream_handler(websocket, None, None, None, None, service)
+            await camera_stream.camera_stream_handler(websocket, None, None, None, service)
             service.start.assert_not_called()
             service.stop.assert_not_called()
             websocket.close.assert_awaited_once_with(code=1013)
     asyncio.run(check())
+
+
+def test_recognition_queues_every_welcome_for_camera_speaker(monkeypatch):
+    events = [{"employee_id": 1, "message": "Xin chào An"},
+              {"employee_id": 2, "message": "Xin chào Bình"}]
+    monkeypatch.setattr(camera_stream, "_run_recognition", Mock(return_value={
+        "faces": [], "attendance_events": [], "welcome_events": events,
+        "recognition_time_ms": 1,
+    }))
+    websocket = Mock(query_params={"camera": "webcam"})
+    websocket.accept = AsyncMock()
+    websocket.send_json = AsyncMock(side_effect=[None, None, WebSocketDisconnect()])
+    service = Mock(source=0, is_running=True)
+    service.get_frame.return_value = np.zeros((24, 32, 3), dtype=np.uint8)
+    audio_service = Mock()
+
+    asyncio.run(camera_stream.camera_stream_handler(
+        websocket, None, None, None, service, audio_service,
+    ))
+
+    assert [call.args[0] for call in audio_service.enqueue.call_args_list] == events
+
+
+@pytest.mark.parametrize("recognized", [True, False])
+def test_recognition_creates_attendance_and_welcome_only_for_known_faces(monkeypatch, recognized):
+    face = Mock(bbox=np.array([2, 2, 20, 20]), embedding=np.ones(4), det_score=0.95)
+    face_service = Mock()
+    face_service.detect_faces.return_value = [face]
+    face_index = Mock()
+    face_index.search.return_value = [(7, 0.9)] if recognized else []
+    attendance = Mock()
+    attendance.process_recognition.return_value = {"employee_id": 7, "action": "CHECK_IN"}
+    db = Mock()
+    monkeypatch.setattr(camera_stream, "SessionLocal", Mock(return_value=db))
+    monkeypatch.setattr(camera_stream, "_welcome_cache", {})
+    monkeypatch.setattr(camera_stream, "_get_employee_info", Mock(return_value={
+        "id": 7, "name": "An", "code": "NV007",
+    }))
+
+    result = camera_stream._run_recognition(
+        np.zeros((32, 32, 3), dtype=np.uint8), face_service, face_index, attendance,
+    )
+
+    assert set(result["faces"][0]) == {
+        "name", "employee_id", "similarity", "bbox", "det_score",
+    }
+    if recognized:
+        attendance.process_recognition.assert_called_once()
+        db.close.assert_called_once()
+        assert result["welcome_events"][0]["employee_id"] == 7
+        assert result["attendance_events"][0]["action"] == "CHECK_IN"
+    else:
+        attendance.process_recognition.assert_not_called()
+        assert result["welcome_events"] == []
+        assert result["attendance_events"] == []

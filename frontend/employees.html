@@ -117,6 +117,18 @@
                         <label class="form-label">Ngày vào làm</label>
                         <input type="date" class="form-input" id="empJoinDate">
                     </div>
+                    <div class="form-group">
+                        <label class="form-label" for="empWelcome">Câu chào khi nhận diện</label>
+                        <textarea class="form-input" id="empWelcome" rows="3" maxlength="300">Xin chào {tên_nhân_viên}. Chúc bạn một ngày tốt lành.</textarea>
+                        <small>Dùng {tên_nhân_viên} để tự điền tên. Âm thanh tự tạo sau khi lưu.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="empVoice">Giọng đọc</label>
+                        <select class="form-select" id="empVoice"><option value="">Giọng mặc định</option></select>
+                    </div>
+                    <div id="empWelcomeStatus" role="status" aria-live="polite"></div>
+                    <button type="button" class="btn btn-outline btn-sm" id="btnPreviewWelcome" onclick="previewWelcome()" disabled>Nghe thử câu đã lưu</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="btnRegenerateWelcome" onclick="regenerateWelcome()" disabled>Tạo lại âm thanh đã lưu</button>
                 </form>
             </div>
             <div class="modal-footer">
@@ -307,9 +319,76 @@
             container.innerHTML = html;
         }
 
+        let welcomePoll = null;
+        let welcomeAudio = null;
+        let welcomeUrl = null;
+
+        async function loadWelcomeVoices(selected = '') {
+            const select = document.getElementById('empVoice');
+            try {
+                const result = await api.request('/tts/voices');
+                select.replaceChildren(new Option('Giọng mặc định', ''));
+                for (const voice of result.voices || []) select.add(new Option(voice.label, voice.name));
+            } catch (error) {
+                console.warn('Cannot load voices', error);
+            }
+            if (selected && !Array.from(select.options).some(option => option.value === selected)) {
+                select.add(new Option(selected, selected));
+            }
+            select.value = selected;
+        }
+
+        function updateWelcomeStatus(employee) {
+            const labels = {pending: 'Đang chờ tạo âm thanh', generating: 'Đang tạo âm thanh', ready: 'Âm thanh đã sẵn sàng', error: 'Tạo âm thanh chưa thành công'};
+            document.getElementById('empWelcomeStatus').textContent =
+                (labels[employee.welcome_status] || '') + (employee.welcome_error ? ': ' + employee.welcome_error : '');
+            document.getElementById('btnPreviewWelcome').disabled = employee.welcome_status !== 'ready';
+            document.getElementById('btnRegenerateWelcome').disabled = !employee.id || ['pending', 'generating'].includes(employee.welcome_status);
+        }
+
+        function watchWelcome(id) {
+            clearTimeout(welcomePoll);
+            welcomePoll = setTimeout(async () => {
+                if (String(id) !== document.getElementById('empId').value || !document.getElementById('employeeModal').classList.contains('active')) return;
+                try {
+                    const employee = await api.getEmployee(id);
+                    if (String(id) !== document.getElementById('empId').value) return;
+                    updateWelcomeStatus(employee);
+                    if (['pending', 'generating'].includes(employee.welcome_status)) watchWelcome(id);
+                } catch (error) {
+                    document.getElementById('empWelcomeStatus').textContent = 'Không lấy được trạng thái. Mở lại nhân viên để kiểm tra.';
+                }
+            }, 2000);
+        }
+
+        async function previewWelcome() {
+            try {
+                const id = document.getElementById('empId').value;
+                const response = await api.request(`/employees/${id}/welcome/audio`);
+                if (welcomeAudio) welcomeAudio.pause();
+                if (welcomeUrl) URL.revokeObjectURL(welcomeUrl);
+                welcomeUrl = URL.createObjectURL(await response.blob());
+                welcomeAudio = new Audio(welcomeUrl);
+                const url = welcomeUrl;
+                welcomeAudio.onended = welcomeAudio.onerror = () => URL.revokeObjectURL(url);
+                await welcomeAudio.play();
+            } catch (error) { toast.error('Âm thanh', error.message); }
+        }
+
+        async function regenerateWelcome() {
+            try {
+                const id = document.getElementById('empId').value;
+                await api.request(`/employees/${id}/welcome/regenerate`, {method: 'POST'});
+                updateWelcomeStatus({id, welcome_status: 'pending'});
+                watchWelcome(id);
+            } catch (error) { toast.error('Âm thanh', error.message); }
+        }
+
         async function saveEmployee() {
             const id = document.getElementById('empId').value;
             const data = {
+                welcome_template: document.getElementById('empWelcome').value,
+                welcome_voice: document.getElementById('empVoice').value || null,
                 employee_code: document.getElementById('empCode').value,
                 full_name: document.getElementById('empName').value,
                 email: document.getElementById('empEmail').value || null,
@@ -322,14 +401,12 @@
             };
 
             try {
-                if (id) {
-                    await api.updateEmployee(id, data);
-                    toast.success('Thành công', 'Đã cập nhật nhân viên');
-                } else {
-                    await api.createEmployee(data);
-                    toast.success('Thành công', 'Đã thêm nhân viên mới');
-                }
-                closeModal('employeeModal');
+                const saved = id ? await api.updateEmployee(id, data) : await api.createEmployee(data);
+                document.getElementById('empId').value = saved.id;
+                editingEmployeeId = saved.id;
+                toast.success('Thành công', 'Đã lưu. Âm thanh câu chào đang được chuẩn bị.');
+                updateWelcomeStatus(saved);
+                watchWelcome(saved.id);
                 loadEmployees(currentPage);
             } catch (e) {
                 toast.error('Lỗi', e.message);
@@ -347,6 +424,10 @@
                 document.getElementById('empCode').value = emp.employee_code;
                 document.getElementById('empCode').readOnly = false;
                 document.getElementById('empName').value = emp.full_name;
+                document.getElementById('empWelcome').value = emp.welcome_template;
+                await loadWelcomeVoices(emp.welcome_voice);
+                updateWelcomeStatus(emp);
+                watchWelcome(emp.id);
                 document.getElementById('empEmail').value = emp.email || '';
                 document.getElementById('empPhone').value = emp.phone || '';
                 document.getElementById('empDept').value = emp.department_id || '';
@@ -582,6 +663,10 @@
             document.getElementById('empId').value = '';
             document.getElementById('empCode').readOnly = false;
             document.getElementById('employeeForm').reset();
+            clearTimeout(welcomePoll);
+            updateWelcomeStatus({welcome_status: 'pending'});
+            document.getElementById('empWelcomeStatus').textContent = 'Lưu nhân viên để tự tạo âm thanh câu chào.';
+            loadWelcomeVoices();
         });
 
         // Search & filter events

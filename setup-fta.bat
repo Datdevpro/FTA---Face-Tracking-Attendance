@@ -7,7 +7,6 @@ title FTA Setup
 rem Use the project .env during setup instead of inherited machine settings.
 set "DEBUG="
 set "FACE_ONNX_PROVIDER="
-set "ANTI_SPOOFING_PROVIDER="
 
 echo ============================================================
 echo   FTA - Automatic Setup for Windows
@@ -89,11 +88,6 @@ echo       Installing project dependencies. This can take several minutes...
 if errorlevel 1 goto :dependency_failed
 "venv\Scripts\python.exe" -m pip check
 if errorlevel 1 goto :dependency_failed
-
-if not exist "data\models\anti_spoofing\AntiSpoofing_bin_1.5_128.onnx" (
-    echo [ERROR] The anti-spoofing model is missing from the repository.
-    goto :failed
-)
 
 echo [6/7] Creating the local database and default account...
 "venv\Scripts\python.exe" -m scripts.init_db
